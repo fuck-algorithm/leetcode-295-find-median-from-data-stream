@@ -280,11 +280,34 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         
         // 步骤3: 平衡检查
         if (maxHeap.length > minHeap.length + 1) {
-          const moved = popMaxHeap(maxHeap);
-          pushMinHeap(minHeap, moved);
+          const moved = maxHeap[0];
+          pushStep({
+            title: '检查数量：左边多了两个',
+            description: `左边 ${maxHeap.length} 个、右边 ${minHeap.length} 个，左边超过右边不止 1 个，需要移动一个边界数。`,
+            codeLines: { java: [8], python: [8], golang: [11], javascript: [8] },
+            maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), action: 'compare',
+            variables: { 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length }, annotations: [],
+          });
+          pushStep({
+            title: `从左边取出最大值 ${moved}`,
+            description: `左边最大的 ${moved} 最接近右半边；把它移到右边不会破坏从小到大的分界。`,
+            codeLines: { java: [9], python: [9], golang: [12], javascript: [9] },
+            maxHeap: [...maxHeap.slice(1)], minHeap: [...minHeap], narratedValue: moved, currentNum: moved,
+            sourceHeap: 'max', targetHeap: 'min', focusHeap: 'max', focusIndices: [0], sortedValues: snapshot(), action: 'remove',
+            variables: { moved, 'maxHeap.top': moved, 'maxHeap.size': maxHeap.length }, annotations: [],
+          });
+          popMaxHeap(maxHeap);
+          const minSwaps = pushMinHeap(minHeap, moved);
+          minSwaps.forEach(({ child, parent, heap }) => {
+            if (parent === -1) {
+              pushStep({ title: `把 ${moved} 放到右堆末尾`, description: `从左堆取出的 ${moved} 先占据右堆下一个空位置。`, codeLines: { java: [10], python: [9], golang: [13], javascript: [10] }, maxHeap: [...maxHeap], minHeap: heap, focusHeap: 'min', focusIndices: [child], narratedValue: moved, sourceHeap: 'max', targetHeap: 'min', sortedValues: snapshot(), action: 'insert', variables: { moved, child }, annotations: [] });
+              return;
+            }
+            pushStep({ title: '调整右堆顺序', description: `为了让小顶堆仍然有效，${heap[child]} 与父节点 ${heap[parent]} 交换位置。`, codeLines: { java: [10], python: [9], golang: [13], javascript: [10] }, maxHeap: [...maxHeap], minHeap: heap, focusHeap: 'min', focusIndices: [parent], compareIndices: [child, parent], narratedValue: moved, sourceHeap: 'max', targetHeap: 'min', sortedValues: snapshot(), action: 'swap', variables: { moved, child, parent }, annotations: [] });
+          });
           steps.push({
             id: stepId++,
-            description: `左边比右边多出 2 个，把左边最大的 ${moved} 移到右边；分界仍有序，两边数量恢复接近。`,
+            description: `边界数 ${moved} 已移动到右边；此时左边 ${maxHeap.length} 个、右边 ${minHeap.length} 个，数量关系恢复有效。`,
             codeLines: { java: [8, 9, 10], python: [8, 9], golang: [11, 12, 13], javascript: [8, 9, 10] },
             maxHeap: [...maxHeap],
             minHeap: [...minHeap],
@@ -300,16 +323,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           });
         }
       } else {
-        const insertionIndex = minHeap.length;
         const minSwaps = pushMinHeap(minHeap, num);
-        pushStep({
-          title: '放入较大的一半',
-          description: `新数字 ${num} 大于左边最大值 ${maxHeap[0]}，先放到右边；右堆目前有 ${minHeap.length} 个数。`,
-          codeLines: { java: [12, 13], python: [11, 12], golang: [15, 16], javascript: [12, 13] },
-          maxHeap: [...maxHeap], minHeap: [...minHeap], currentNum: num, narratedValue: num, targetHeap: 'min',
-          focusHeap: 'min', focusIndices: [insertionIndex], sortedValues: [...maxHeap, ...minHeap].sort((a, b) => a - b), action: 'insert',
-          variables: { num, 'maxHeap.top': maxHeap[0], 'minHeap.size': minHeap.length }, annotations: [],
-        });
         minSwaps.forEach(({ child, parent, heap }, swapIndex) => {
           if (parent === -1) {
             pushStep({
@@ -331,9 +345,17 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
             variables: { num, child, parent, 'minHeap.top': heap[0] }, annotations: [],
           });
         });
+        pushStep({
+          title: '放入较大的一半',
+          description: `${num} 大于左边最大值 ${maxHeap[0]}，所以 ${num} 属于较大的一半。`,
+          codeLines: { java: [12, 13], python: [11, 12], golang: [15, 16], javascript: [12, 13] },
+          maxHeap: [...maxHeap], minHeap: [...minHeap], currentNum: num, narratedValue: num, targetHeap: 'min',
+          sortedValues: snapshot(), action: 'add',
+          variables: { num, 'maxHeap.top': maxHeap[0], 'minHeap.size': minHeap.length }, annotations: [],
+        });
         steps.push({
           id: stepId++,
-          description: `${num} 大于左边最大值 ${maxHeap[0]}，所以 ${num} 属于较大的一半，放入右边。`,
+          description: `${num} 已进入右边，接下来检查两堆的数量是否仍然平衡。`,
           codeLines: { java: [12, 13], python: [11, 12], golang: [15, 16], javascript: [12, 13] },
           maxHeap: [...maxHeap],
           minHeap: [...minHeap],
@@ -350,11 +372,34 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         
         // 步骤3: 平衡检查
         if (minHeap.length > maxHeap.length) {
-          const moved = popMinHeap(minHeap);
-          pushMaxHeap(maxHeap, moved);
+          const moved = minHeap[0];
+          pushStep({
+            title: '检查数量：右边多了一个',
+            description: `左边 ${maxHeap.length} 个，右边 ${minHeap.length} 个；允许左边比右边多 1 个，不允许右边反而更多。`,
+            codeLines: { java: [18], python: [17], golang: [21], javascript: [103] },
+            maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), action: 'compare',
+            variables: { 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length }, annotations: [],
+          });
+          pushStep({
+            title: `从右边取出最小值 ${moved}`,
+            description: `右边最小的 ${moved} 正好是两边的分界；移到左边后，所有左侧数字仍不大于右侧数字。`,
+            codeLines: { java: [19], python: [18], golang: [22], javascript: [104] },
+            maxHeap: [...maxHeap], minHeap: [...minHeap.slice(1)], narratedValue: moved, currentNum: moved,
+            sourceHeap: 'min', targetHeap: 'max', focusHeap: 'min', focusIndices: [0], sortedValues: snapshot(), action: 'remove',
+            variables: { moved, 'minHeap.top': moved, 'minHeap.size': minHeap.length }, annotations: [],
+          });
+          popMinHeap(minHeap);
+          const maxSwaps = pushMaxHeap(maxHeap, moved);
+          maxSwaps.forEach(({ child, parent, heap }) => {
+            if (parent === -1) {
+              pushStep({ title: `把 ${moved} 放到左堆末尾`, description: `从右堆取出的 ${moved} 先占据左堆下一个空位置。`, codeLines: { java: [19], python: [18], golang: [22], javascript: [104] }, maxHeap: heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: [child], narratedValue: moved, sourceHeap: 'min', targetHeap: 'max', sortedValues: [...heap, ...minHeap].sort((a, b) => a - b), action: 'insert', variables: { moved, child }, annotations: [] });
+              return;
+            }
+            pushStep({ title: '调整左堆顺序', description: `为了让大顶堆仍然有效，${heap[child]} 与父节点 ${heap[parent]} 交换位置。`, codeLines: { java: [19], python: [18], golang: [22], javascript: [104] }, maxHeap: heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: [parent], compareIndices: [child, parent], narratedValue: moved, sourceHeap: 'min', targetHeap: 'max', sortedValues: snapshot(), action: 'swap', variables: { moved, child, parent }, annotations: [] });
+          });
           steps.push({
             id: stepId++,
-            description: `右边比左边多出 1 个，把右边最小的 ${moved} 移到左边；较小与较大的分界没有被破坏。`,
+            description: `边界数 ${moved} 已移动到左边；此时左边 ${maxHeap.length} 个、右边 ${minHeap.length} 个，两边数量有效。`,
             codeLines: { java: [14, 15, 16], python: [13, 14], golang: [17, 18, 19], javascript: [14, 15, 16] },
             maxHeap: [...maxHeap],
             minHeap: [...minHeap],
@@ -388,7 +433,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           description: `左边有 ${maxHeap.length} 个、右边有 ${minHeap.length} 个；左边多一个，因此左边最大值 ${median} 就在正中间。`,
           codeLines: { java: [28, 29], python: [51, 52], golang: [83, 84], javascript: [110, 111] },
           maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), median,
-          focusHeap: 'max', focusIndices: [0], action: 'compare',
+          currentNum: median, focusHeap: 'max', focusIndices: [0], action: 'compare',
           variables: { 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length, 'maxHeap.top': median }, annotations: [],
         });
         steps.push({
@@ -397,6 +442,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           codeLines: { java: [20, 21], python: [17, 18], golang: [23, 24], javascript: [20, 21] },
           maxHeap: [...maxHeap],
           minHeap: [...minHeap],
+          sortedValues: snapshot(),
           median,
           action: 'findMedian',
           variables: { 'maxHeap.top': maxHeap[0], 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length, median },
@@ -411,7 +457,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           description: `两边各有 ${maxHeap.length} 个数字，中间落在边界之间；取左边最大值 ${maxHeap[0]} 与右边最小值 ${minHeap[0]} 的平均值。`,
           codeLines: { java: [31], python: [53], golang: [86], javascript: [113] },
           maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), median,
-          focusHeap: 'max', focusIndices: [0], compareIndices: [0], action: 'compare',
+          currentNum: maxHeap[0], focusHeap: 'max', focusIndices: [0], compareIndices: [0], action: 'compare',
           variables: { 'maxHeap.top': maxHeap[0], 'minHeap.top': minHeap[0], median }, annotations: [],
         });
         steps.push({
@@ -420,6 +466,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           codeLines: { java: [23], python: [19], golang: [26], javascript: [23] },
           maxHeap: [...maxHeap],
           minHeap: [...minHeap],
+          sortedValues: snapshot(),
           median,
           action: 'findMedian',
           variables: { 'maxHeap.top': maxHeap[0], 'minHeap.top': minHeap[0], 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length, median },

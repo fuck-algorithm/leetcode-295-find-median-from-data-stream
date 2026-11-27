@@ -109,9 +109,7 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
     nodeIdsRef.current = minStable.next;
     const maxNodes = layoutHeap(currentStep.maxHeap, 'max', maxCenter, maxStable.ids);
     const minNodes = layoutHeap(currentStep.minHeap, 'min', minCenter, minStable.ids);
-    const incoming = currentStep.action === 'add' || currentStep.action === 'insert' || (currentStep.action === 'compare' && currentStep.currentNum !== undefined)
-      ? currentStep.narratedValue ?? currentStep.currentNum
-      : undefined;
+    const incoming = currentStep.currentNum ?? (currentStep.action === 'add' || currentStep.action === 'insert' || currentStep.action === 'remove' ? currentStep.narratedValue : undefined);
     const moved = currentStep.action === 'balance' ? currentStep.narratedValue : currentStep.action === 'swap' ? currentStep.narratedValue : undefined;
     const nodes = [...maxNodes, ...minNodes];
     const transitionMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 240;
@@ -230,7 +228,7 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
       .attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 600).attr('fill', colors.ink).text(datum => datum.text);
 
     const visibleValues = [...ordered];
-    if (incoming !== undefined) visibleValues.push(incoming);
+    if (currentStep.action === 'compare' && incoming !== undefined && !visibleValues.includes(incoming)) visibleValues.push(incoming);
     visibleValues.sort((a, b) => a - b);
     const railWidth = Math.min(width - 48, 560);
     const gap = 6;
@@ -238,7 +236,7 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
     const totalWidth = visibleValues.length * pillWidth + Math.max(0, visibleValues.length - 1) * gap;
     const middleLeft = Math.floor((visibleValues.length - 1) / 2);
     const middleRight = Math.floor(visibleValues.length / 2);
-    const isQuery = currentStep.median !== undefined && currentStep.median !== null;
+    const isQuery = currentStep.action === 'findMedian' && currentStep.median !== undefined && currentStep.median !== null;
     const rail: SortedValueData[] = visibleValues.map((value, index) => ({
       id: `${value}:${visibleValues.slice(0, index).filter(item => item === value).length}`,
       value, index, x: width / 2 - totalWidth / 2 + index * (pillWidth + gap) + pillWidth / 2,
@@ -259,7 +257,8 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
       .attr('stroke-width', datum => datum.isMedian || datum.isIncoming ? 2 : 1);
     pills.select('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('font-size', 12).attr('font-weight', 700)
       .attr('fill', colors.ink).text(datum => datum.value);
-    pills.select('title').text(datum => `${datum.value}${datum.isMedian ? '，中间位置' : ''}${datum.isIncoming ? '，正在插入' : ''}`);
+    const valueVerb = currentStep.action === 'remove' ? '正在移除' : '正在插入';
+    pills.select('title').text(datum => `${datum.value}${datum.isMedian ? '，中间位置' : ''}${datum.isIncoming ? `，${valueVerb}` : ''}`);
 
     const railSplit = visibleValues.length % 2 ? Math.ceil(visibleValues.length / 2) : visibleValues.length / 2;
     const splitX = railSplit < rail.length ? (rail[railSplit - 1].x + rail[railSplit].x) / 2 : width / 2;
@@ -270,7 +269,11 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
 
     const hint = currentStep.action === 'balance' && currentStep.narratedValue !== undefined
       ? `把 ${currentStep.narratedValue} 从${currentStep.sourceHeap === 'max' ? '左边' : '右边'}移到${currentStep.targetHeap === 'max' ? '左边' : '右边'}，让两边数量接近。`
-      : currentStep.action === 'swap'
+      : currentStep.action === 'remove'
+        ? currentStep.description
+        : currentStep.action === 'compare' && currentStep.currentNum !== undefined
+          ? currentStep.description
+          : currentStep.action === 'swap'
         ? (currentStep.compareIndices?.[0] === currentStep.focusIndices?.[0] ? currentStep.description : `比较堆中位置 ${currentStep.compareIndices?.join(' 和 ')}，交换后父节点继续保持堆顶规则。`)
         : currentStep.action === 'insert' || (currentStep.action === 'compare' && currentStep.currentNum === undefined)
           ? currentStep.description
@@ -284,7 +287,7 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
       .attr('x', 18).attr('y', datum => datum.y).attr('width', width - 36).attr('height', datum => datum.height)
       .attr('rx', 10).attr('fill', datum => datum.fill).attr('stroke', datum => datum.stroke);
     const operationText: Record<AlgorithmStep['action'], string> = {
-      init: '先分成两半', add: currentStep.title ?? '放入新数字', insert: currentStep.title ?? '放入堆底', compare: currentStep.currentNum === undefined ? (currentStep.title ?? '判断中间位置') : (currentStep.title ?? '比较新数字'), swap: currentStep.title ?? '交换以恢复堆序', balance: currentStep.title ?? '移动边界数', findMedian: currentStep.title ?? '读取中位数', complete: '完成',
+      init: '先分成两半', add: currentStep.title ?? '放入新数字', insert: currentStep.title ?? '放入堆底', remove: currentStep.title ?? '移出堆顶', compare: currentStep.action === 'compare' && currentStep.title ? currentStep.title : currentStep.currentNum === undefined ? '判断中间位置' : '比较边界值', swap: currentStep.title ?? '交换以恢复堆序', balance: currentStep.title ?? '移动边界数', findMedian: currentStep.title ?? '读取中位数', complete: '完成',
     };
     const narration = [
       { id: 'action', x: 32, y: explanationY + 24, text: operationText[currentStep.action], fill: '#8a5c08', weight: 700 },
@@ -299,7 +302,7 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
       .join('text').attr('class', 'rule').attr('x', datum => datum.x).attr('y', datum => datum.y)
       .attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', colors.muted).text(datum => datum.text);
 
-    const medianLabel = currentStep.median === undefined || currentStep.median === null ? [] : [{
+    const medianLabel = currentStep.action !== 'findMedian' || currentStep.median === undefined || currentStep.median === null ? [] : [{
       id: 'median',
       text: currentStep.maxHeap.length === currentStep.minHeap.length
         ? `中位数 = (${currentStep.maxHeap[0]} + ${currentStep.minHeap[0]}) ÷ 2 = ${currentStep.median}`
