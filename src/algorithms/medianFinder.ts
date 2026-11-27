@@ -269,7 +269,9 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
       
       // 步骤1: 显示要添加的数字
       pushStep({
-        description: `新数字 ${num} 到达数据流，先和中间边界比较，再决定放到哪一半。`,
+        title: `数据流送来 ${num}`,
+        description: `新数字 ${num} 刚到达；它还没有进入任何一边，下一步将它与左边界比较。`,
+        isStreamArrival: true,
         codeLines: { java: [5], python: [5], golang: [8], javascript: [5] },
         maxHeap: [...maxHeap],
         minHeap: [...minHeap],
@@ -288,8 +290,8 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
       pushStep({
         title: '判断新数字属于哪一半',
         description: maxHeap.length === 0
-          ? `左边还没有边界值，先把 ${num} 放进较小的一半。`
-          : `${num} ${goesLeft ? '≤' : '>'} 左边最大值 ${maxHeap[0]}，因此放入${goesLeft ? '较小' : '较大'}的一半。`,
+          ? `左边为空，将 ${num} 放进较小的一半。`
+          : `${num} ${goesLeft ? '≤' : '>'} 左侧最大值 ${maxHeap[0]}，放进${goesLeft ? '较小' : '较大'}的一半。`,
         codeLines: { java: [11], python: [41], golang: [69], javascript: [96] },
         maxHeap: [...maxHeap], minHeap: [...minHeap], currentNum: num, narratedValue: num,
         focusHeap: maxHeap.length ? 'max' : undefined, focusIndices: maxHeap.length ? [0] : undefined,
@@ -303,7 +305,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           const indices = parent < 0 ? [child] : [child, parent];
           if (swapped && parent >= 0) pushStep({
             title: `比较父子节点 ${beforeHeap[child]} 与 ${beforeHeap[parent]}`,
-            description: `新值 ${beforeHeap[child]} 大于父节点 ${beforeHeap[parent]}，违反大顶堆顺序，下一步要交换。`,
+            description: `堆底的新数字 ${beforeHeap[child]} 大于父节点 ${beforeHeap[parent]}；大顶堆要求父节点更大，下一步把较大值上移。`,
             codeLines: { java: [6], python: [6], golang: [9], javascript: [6] },
             maxHeap: beforeHeap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: [child], compareIndices: indices,
             narratedValue: num, targetHeap: 'max', sortedValues: [...beforeHeap, ...minHeap].sort((a, b) => a - b),
@@ -314,8 +316,8 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
             description: parent < 0
               ? `先把 ${num} 放进下一个空位置（堆内位置 ${child}），再从底向上检查父节点。`
               : swapped
-                ? `子节点 ${beforeHeap[child]} 大于父节点 ${beforeHeap[parent]}，交换位置 ${child} 和 ${parent}，让较大的值向堆顶移动。`
-                : `比较子节点 ${beforeHeap[child]} 与父节点 ${beforeHeap[parent]}；父节点更大，满足大顶堆规则，停止上滤。`,
+                ? `较大的子节点 ${beforeHeap[child]} 在位置 ${child}，父节点 ${beforeHeap[parent]} 在位置 ${parent}；将较大值上移，维持最大值在堆顶。`
+                : `比较新节点 ${beforeHeap[child]} 与父节点 ${beforeHeap[parent]}：父节点更大，满足大顶堆规则，所以停止上滤。`,
             codeLines: { java: [6], python: [6], golang: [9], javascript: [6] },
             maxHeap: kind === 'compare' ? beforeHeap : heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: swapped && parent >= 0 ? [parent] : [child],
             compareIndices: parent >= 0 ? indices : undefined, narratedValue: num, targetHeap: 'max',
@@ -394,7 +396,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           const indices = parent < 0 ? [child] : [child, parent];
           if (swapped && parent >= 0) pushStep({
             title: `比较右堆父子节点 ${beforeHeap[child]} 与 ${beforeHeap[parent]}`,
-            description: `右堆子节点 ${beforeHeap[child]} 小于父节点 ${beforeHeap[parent]}，违反小顶堆顺序，下一步要交换。`,
+            description: `堆底的新数字 ${beforeHeap[child]} 小于父节点 ${beforeHeap[parent]}；小顶堆要求父节点更小，下一步把较小值上移。`,
             codeLines: { java: [12], python: [11], golang: [15], javascript: [12] },
             maxHeap: [...maxHeap], minHeap: beforeHeap, focusHeap: 'min', focusIndices: [child], compareIndices: indices,
             narratedValue: num, targetHeap: 'min', sortedValues: [...maxHeap, ...beforeHeap].sort((a, b) => a - b),
@@ -405,8 +407,8 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
             description: parent < 0
               ? `先把 ${num} 放进右堆下一个空位置（堆内位置 ${child}），再向上检查是否需要交换。`
               : swapped
-                ? `子节点 ${beforeHeap[child]} 小于父节点 ${beforeHeap[parent]}，交换位置 ${child} 和 ${parent}，让较小值向堆顶移动。`
-                : `比较子节点 ${beforeHeap[child]} 与父节点 ${beforeHeap[parent]}；父节点更小，满足小顶堆规则，停止上滤。`,
+                ? `较小的子节点 ${beforeHeap[child]} 在位置 ${child}，父节点 ${beforeHeap[parent]} 在位置 ${parent}；将较小值上移，维持最小值在堆顶。`
+                : `比较新节点 ${beforeHeap[child]} 与父节点 ${beforeHeap[parent]}：父节点更小，满足小顶堆规则，所以停止上滤。`,
             codeLines: { java: [12], python: [11], golang: [15], javascript: [12] },
             maxHeap: [...maxHeap], minHeap: kind === 'compare' ? beforeHeap : heap, focusHeap: 'min', focusIndices: swapped && parent >= 0 ? [parent] : [child],
             compareIndices: parent >= 0 ? indices : undefined, narratedValue: num, targetHeap: 'min',

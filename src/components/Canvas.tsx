@@ -105,12 +105,22 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
     const maxCenter = width * 0.27;
     const minCenter = width * 0.73;
     const ordered = currentStep.sortedValues ?? [...currentStep.maxHeap, ...currentStep.minHeap].sort((a, b) => a - b);
+    const isArrival = currentStep.isStreamArrival === true;
+    const isTransientFrame = isArrival || ['insert', 'remove', 'swap'].includes(currentStep.action) || (currentStep.action === 'compare' && currentStep.title?.startsWith('比较') === true);
+    const hasValues = currentStep.maxHeap.length + currentStep.minHeap.length > 0;
+    const ruleStatus = isTransientFrame ? 'temporary'
+      : !hasValues ? 'pending'
+      : currentStep.maxHeap.length > currentStep.minHeap.length + 1 || currentStep.maxHeap.length < currentStep.minHeap.length
+        ? 'temporary'
+        : currentStep.maxHeap.length === 0 || currentStep.minHeap.length === 0 || currentStep.maxHeap[0] <= currentStep.minHeap[0] ? 'valid' : 'temporary';
     const maxStable = stableIds('max', currentStep.maxHeap, nodeIdsRef.current);
     const minStable = stableIds('min', currentStep.minHeap, maxStable.next);
     nodeIdsRef.current = minStable.next;
     const maxNodes = layoutHeap(currentStep.maxHeap, 'max', maxCenter, maxStable.ids);
     const minNodes = layoutHeap(currentStep.minHeap, 'min', minCenter, minStable.ids);
-    const incoming = currentStep.currentNum ?? (currentStep.action === 'add' || currentStep.action === 'insert' ? currentStep.narratedValue : undefined);
+    const incoming = isArrival || currentStep.action === 'insert'
+      ? currentStep.currentNum ?? currentStep.narratedValue
+      : undefined;
     const departing = currentStep.action === 'remove' ? currentStep.currentNum ?? currentStep.narratedValue : undefined;
     const displayValue = currentStep.currentNum ?? incoming ?? departing;
     const moved = currentStep.action === 'balance' ? currentStep.narratedValue : currentStep.action === 'swap' ? currentStep.narratedValue : undefined;
@@ -180,8 +190,9 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
     groups.interrupt('move').interrupt('exit')
       .transition('move').duration(transitionMs)
       .attr('transform', datum => `translate(${datum.x}, ${datum.y})`).attr('opacity', 1);
-    if (currentStep.action !== 'swap') root.select('.layer-arrows').selectAll('*').remove();
-    if (currentStep.action === 'swap' && currentStep.focusHeap && currentStep.compareIndices?.length === 2) {
+    if (currentStep.action !== 'swap' && currentStep.action !== 'compare') root.select('.layer-arrows').selectAll('*').remove();
+    if ((currentStep.action === 'swap' || (currentStep.action === 'compare' && currentStep.title?.startsWith('比较')))
+      && currentStep.focusHeap && currentStep.compareIndices?.length === 2) {
       const [childIndex, parentIndex] = currentStep.compareIndices;
       const child = nodes.find(node => node.heap === currentStep.focusHeap && node.index === childIndex);
       const parent = nodes.find(node => node.heap === currentStep.focusHeap && node.index === parentIndex);
@@ -193,7 +204,8 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
           .join('line').attr('class', 'heap-swap')
           .attr('x1', datum => datum.from.x).attr('y1', datum => datum.from.y)
           .attr('x2', datum => datum.from.x).attr('y2', datum => datum.from.y)
-          .attr('stroke', colors.current).attr('stroke-width', 3).attr('marker-end', 'url(#arrow)')
+          .attr('stroke', currentStep.action === 'swap' ? colors.current : '#7a8790').attr('stroke-width', 3)
+          .attr('stroke-dasharray', currentStep.action === 'compare' ? '5 4' : null).attr('marker-end', 'url(#arrow)')
           .transition('swap').duration(transitionMs)
           .attr('x2', datum => datum.to.x).attr('y2', datum => datum.to.y);
       }
@@ -211,11 +223,12 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
 
     const teaching = root.select<SVGGElement>('.layer-teaching');
     const texts = [
+      { id: 'rule-status', x: width / 2, y: 48, size: 11, weight: 700, fill: ruleStatus === 'valid' ? colors.max : '#a66318', text: ruleStatus === 'valid' ? '分区与数量规则：已满足' : ruleStatus === 'pending' ? '尚无数据：等待第一个数字' : isArrival ? '新数字尚未入堆：规则检查暂停' : '正在调整：暂时不满足最终规则' },
       { id: 'left-title', x: maxCenter, y: 62, size: 18, weight: 700, fill: colors.max, text: '较小的一半' },
-      { id: 'left-subtitle', x: maxCenter, y: 84, size: 12, weight: 400, fill: colors.muted, text: '大顶堆：堆顶是左边最大值' },
+      { id: 'left-subtitle', x: maxCenter, y: 84, size: 12, weight: 400, fill: colors.muted, text: '父节点 ≥ 子节点 | 堆顶 = 左边最大值' },
       { id: 'left-count', x: maxCenter, y: 112, size: 13, weight: 500, fill: colors.ink, text: currentStep.maxHeap.length ? `堆顶 ${currentStep.maxHeap[0]} | ${currentStep.maxHeap.length} 个数` : '还没有数字' },
       { id: 'right-title', x: minCenter, y: 62, size: 18, weight: 700, fill: colors.min, text: '较大的一半' },
-      { id: 'right-subtitle', x: minCenter, y: 84, size: 12, weight: 400, fill: colors.muted, text: '小顶堆：堆顶是右边最小值' },
+      { id: 'right-subtitle', x: minCenter, y: 84, size: 12, weight: 400, fill: colors.muted, text: '父节点 ≤ 子节点 | 堆顶 = 右边最小值' },
       { id: 'right-count', x: minCenter, y: 112, size: 13, weight: 500, fill: colors.ink, text: currentStep.minHeap.length ? `堆顶 ${currentStep.minHeap[0]} | ${currentStep.minHeap.length} 个数` : '还没有数字' },
     ];
     teaching.selectAll<SVGTextElement, typeof texts[number]>('text.heap-heading')
@@ -226,13 +239,14 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
 
     const listLabelY = 146;
     teaching.selectAll<SVGTextElement, { id: string; x: number; y: number; text: string }>('text.sorted-label')
-      .data([{ id: 'sorted-label', x: width / 2, y: listLabelY, text: '先看整体顺序：左边所有数 ≤ 右边所有数' }], datum => datum.id)
+      .data([{ id: 'sorted-label', x: width / 2, y: listLabelY, text: ruleStatus === 'pending' ? '两个堆现在都为空；等待数据流送入第一个数字' : isArrival ? '新数字还在等待入堆；下方为已处理的数据' : ruleStatus === 'valid' ? '整体顺序：左边所有数 ≤ 右边所有数' : '正在调整堆结构；这是操作中的临时画面' }], datum => datum.id)
       .join('text').attr('class', 'sorted-label').attr('x', datum => datum.x).attr('y', datum => datum.y)
       .attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 600).attr('fill', colors.ink).text(datum => datum.text);
 
     const visibleValues = [...ordered];
     if ((currentStep.action === 'compare' || currentStep.action === 'remove' || (currentStep.action === 'insert' && currentStep.sourceHeap))
       && displayValue !== undefined && !visibleValues.includes(displayValue)) visibleValues.push(displayValue);
+    if (isArrival && displayValue !== undefined && !visibleValues.includes(displayValue)) visibleValues.push(displayValue);
     if (departing !== undefined && !visibleValues.includes(departing)) visibleValues.push(departing);
     visibleValues.sort((a, b) => a - b);
     const railWidth = Math.min(width - 48, 560);
@@ -242,10 +256,11 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
     const middleLeft = Math.floor((visibleValues.length - 1) / 2);
     const middleRight = Math.floor(visibleValues.length / 2);
     const isQuery = (currentStep.action === 'findMedian' || currentStep.action === 'return') && currentStep.median !== undefined && currentStep.median !== null;
+    const partitionIndex = currentStep.maxHeap.length;
     const rail: SortedValueData[] = visibleValues.map((value, index) => ({
       id: `${value}:${visibleValues.slice(0, index).filter(item => item === value).length}`,
       value, index, x: width / 2 - totalWidth / 2 + index * (pillWidth + gap) + pillWidth / 2,
-      y: 176, isMedian: isQuery && (index === middleLeft || index === middleRight), isIncoming: value === incoming, isDeparting: value === departing,
+      y: 176, isMedian: isQuery && (index === middleLeft || index === middleRight), isIncoming: value === incoming || (isArrival && value === displayValue), isDeparting: value === departing,
     }));
     const sortedLayer = root.select<SVGGElement>('.layer-labels');
     const pills = sortedLayer.selectAll<SVGGElement, SortedValueData>('g.sorted-value')
@@ -262,7 +277,20 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
       .attr('stroke-width', datum => datum.isMedian || datum.isIncoming || datum.isDeparting ? 2 : 1);
     pills.select('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('font-size', 12).attr('font-weight', 700)
       .attr('fill', colors.ink).text(datum => datum.value);
-    pills.select('title').text(datum => `${datum.value}${datum.isMedian ? '，中间位置' : ''}${datum.isIncoming ? '，正在插入' : ''}${datum.isDeparting ? '，待移出堆' : ''}`);
+    const arrivalLabel = isArrival ? '新到达' : '正在插入';
+    pills.select('title').text(datum => `${datum.value}${datum.isMedian ? '，中间位置' : ''}${datum.isIncoming ? `，${arrivalLabel}` : ''}${datum.isDeparting ? '，待移出堆' : ''}`);
+    const markerX = rail[partitionIndex - 1] && rail[partitionIndex]
+      ? (rail[partitionIndex - 1].x + rail[partitionIndex].x) / 2
+      : rail[partitionIndex - 1]?.x ?? rail[partitionIndex]?.x;
+    const marker = teaching.selectAll<SVGLineElement, { id: string; x: number }>('line.active-value-marker')
+      .data(displayValue !== undefined && markerX !== undefined ? [{ id: 'active-value', x: markerX }] : [], datum => datum.id)
+      .join('line').attr('class', 'active-value-marker').attr('x1', datum => datum.x).attr('x2', datum => datum.x)
+      .attr('y1', 202).attr('y2', 292).attr('stroke', '#c96f21').attr('stroke-width', 2).attr('stroke-dasharray', '5 4');
+    marker.raise();
+    teaching.selectAll<SVGTextElement, { id: string; x: number; y: number; text: string }>('text.active-value-label')
+      .data(displayValue !== undefined && markerX !== undefined ? [{ id: 'active-value-label', x: markerX, y: 220, text: currentStep.action === 'remove' ? `移出 ${displayValue}` : `当前 ${displayValue}` }] : [], datum => datum.id)
+      .join('text').attr('class', 'active-value-label').attr('x', datum => datum.x + 8).attr('y', datum => datum.y)
+      .attr('font-size', 10).attr('font-weight', 700).attr('fill', '#8a5c08').text(datum => datum.text);
 
     const railSplit = visibleValues.length % 2 ? Math.ceil(visibleValues.length / 2) : visibleValues.length / 2;
     const splitX = railSplit < rail.length ? (rail[railSplit - 1].x + rail[railSplit].x) / 2 : width / 2;
@@ -273,19 +301,21 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
 
     const hint = currentStep.action === 'return'
       ? currentStep.description
-      : currentStep.action === 'balance' && currentStep.narratedValue !== undefined
-      ? `把 ${currentStep.narratedValue} 从${currentStep.sourceHeap === 'max' ? '左边' : '右边'}移到${currentStep.targetHeap === 'max' ? '左边' : '右边'}，让两边数量接近。`
-      : currentStep.action === 'remove'
+      : isArrival && displayValue !== undefined
+        ? `数据流送来 ${displayValue}；它还没有进入任何一边，下一步先与中间边界比较。`
+        : currentStep.action === 'balance' && currentStep.narratedValue !== undefined
+          ? `把 ${currentStep.narratedValue} 从${currentStep.sourceHeap === 'max' ? '左边' : '右边'}移到${currentStep.targetHeap === 'max' ? '左边' : '右边'}，让两边数量接近。`
+          : currentStep.action === 'remove'
         ? currentStep.description
         : currentStep.action === 'compare' && currentStep.currentNum !== undefined
           ? currentStep.description
-          : currentStep.action === 'swap'
-        ? (currentStep.compareIndices?.[0] === currentStep.focusIndices?.[0] ? currentStep.description : `比较堆中位置 ${currentStep.compareIndices?.join(' 和 ')}，交换后父节点继续保持堆顶规则。`)
-        : currentStep.action === 'insert' || (currentStep.action === 'compare' && currentStep.currentNum === undefined)
-          ? currentStep.description
-          : incoming !== undefined
-            ? (currentStep.maxHeap.length ? `${incoming} ${incoming <= currentStep.maxHeap[0] ? '≤' : '>'} 左边最大值 ${currentStep.maxHeap[0]}，放到${incoming <= currentStep.maxHeap[0] ? '左' : '右'}边。` : `左边还没有数，先把 ${incoming} 放到左边。`)
-            : currentStep.description;
+              : currentStep.action === 'swap'
+              ? (currentStep.compareIndices?.[0] === currentStep.focusIndices?.[0] ? currentStep.description : `比较堆中位置 ${currentStep.compareIndices?.join(' 和 ')}，交换后父节点继续保持堆顶规则。`)
+              : currentStep.action === 'insert' || (currentStep.action === 'compare' && currentStep.currentNum === undefined)
+                ? currentStep.description
+                : incoming !== undefined
+                  ? (currentStep.maxHeap.length ? `${incoming} ${incoming <= currentStep.maxHeap[0] ? '≤' : '>'} 左边最大值 ${currentStep.maxHeap[0]}，放到${incoming <= currentStep.maxHeap[0] ? '左' : '右'}边。` : `左边还没有数，先把 ${incoming} 放到左边。`)
+                  : currentStep.description;
     const explanationY = height - 58;
     const cards = [{ id: 'explanation', y: explanationY, height: 40, fill: '#fff8e8', stroke: '#f0d799' }];
     teaching.selectAll<SVGRectElement, typeof cards[number]>('rect.teaching-card')
@@ -293,7 +323,7 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
       .attr('x', 18).attr('y', datum => datum.y).attr('width', width - 36).attr('height', datum => datum.height)
       .attr('rx', 10).attr('fill', datum => datum.fill).attr('stroke', datum => datum.stroke);
     const operationText: Record<AlgorithmStep['action'], string> = {
-      init: '先分成两半', add: currentStep.title ?? '放入新数字', insert: currentStep.title ?? '放入堆底', remove: currentStep.title ?? '移出堆顶', compare: currentStep.title ?? (currentStep.currentNum === undefined ? '判断中间位置' : '比较边界值'), swap: currentStep.title ?? '交换以恢复堆序', balance: currentStep.title ?? '移动边界数', findMedian: currentStep.title ?? '读取中位数', return: currentStep.title ?? '返回结果', complete: '完成',
+      init: '先分成两半', add: isArrival ? '新数到达' : currentStep.title ?? '放入新数字', insert: currentStep.title ?? '放入堆底', remove: currentStep.title ?? '移出堆顶', compare: currentStep.title ?? (currentStep.currentNum === undefined ? '判断中间位置' : '比较边界值'), swap: currentStep.title ?? '交换以恢复堆序', balance: currentStep.title ?? '移动边界数', findMedian: currentStep.title ?? '读取中位数', return: currentStep.title ?? '返回结果', complete: '完成',
     };
     const narration = [
       { id: 'action', x: 32, y: explanationY + 24, text: operationText[currentStep.action], fill: '#8a5c08', weight: 700 },

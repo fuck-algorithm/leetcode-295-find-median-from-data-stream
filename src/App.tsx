@@ -19,7 +19,7 @@ const getInitialSteps = () => {
 function App() {
   const initialSteps = useMemo(() => getInitialSteps(), []);
   const [steps, setSteps] = useState<AlgorithmStep[]>(initialSteps);
-  const [currentStepIndex, setCurrentStepIndex] = useState(1);
+  const [currentStepIndex, setCurrentStepIndex] = useState(2);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const playIntervalRef = useRef<number | null>(null);
@@ -28,7 +28,7 @@ function App() {
   const handleDataChange = useCallback((operations: string[], values: (number | null)[][]) => {
     const newSteps = generateSteps(operations, values);
     setSteps(newSteps);
-    setCurrentStepIndex(0);
+    setCurrentStepIndex(Math.min(2, newSteps.length - 1));
     setIsPlaying(false);
   }, []);
 
@@ -54,7 +54,7 @@ function App() {
   }, [isPlaying, steps.length, playbackSpeed]);
 
   const handlePrev = useCallback(() => {
-    setCurrentStepIndex(prev => Math.max(0, prev - 1));
+    setCurrentStepIndex(prev => Math.max(1, prev - 1));
   }, []);
 
   const handleNext = useCallback(() => {
@@ -63,13 +63,13 @@ function App() {
 
   const handlePlayPause = useCallback(() => {
     if (currentStepIndex >= steps.length - 1) {
-      setCurrentStepIndex(Math.min(1, steps.length - 1));
+      setCurrentStepIndex(Math.min(2, steps.length - 1));
     }
     setIsPlaying(prev => !prev);
   }, [currentStepIndex, steps.length]);
 
   const handleReset = useCallback(() => {
-    setCurrentStepIndex(Math.min(1, steps.length - 1));
+    setCurrentStepIndex(Math.min(2, steps.length - 1));
     setIsPlaying(false);
   }, [steps.length]);
 
