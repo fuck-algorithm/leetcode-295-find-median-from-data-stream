@@ -107,29 +107,74 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
   const minHeap: number[] = [];
   const snapshot = () => [...maxHeap, ...minHeap].sort((a, b) => a - b);
   const pushStep = (step: Omit<AlgorithmStep, 'id'>) => steps.push({ id: stepId++, ...step });
+  const emitPopSteps = (
+    side: 'max' | 'min',
+    value: number,
+    states: Array<{ heap: number[]; beforeHeap: number[]; from: number; to: number; swapped: boolean }>,
+    otherHeap: number[],
+  ) => {
+    states.forEach((state, index) => {
+      const removingOnlyRoot = index === 0 && state.to === -1;
+      const replacingRoot = index === 0 && !removingOnlyRoot;
+      const finalCheck = index === states.length - 1 && state.from === state.to && index > 0;
+      const operation = removingOnlyRoot || replacingRoot ? 'remove' : state.swapped ? 'swap' : 'compare';
+      const leftHeap = side === 'max' ? state.heap : otherHeap;
+      const rightHeap = side === 'min' ? state.heap : otherHeap;
+      const beforeLeftHeap = side === 'max' ? state.beforeHeap : otherHeap;
+      const beforeRightHeap = side === 'min' ? state.beforeHeap : otherHeap;
+      const relation = side === 'max' ? '更大' : '更小';
+      const narration = removingOnlyRoot
+        ? `堆里只有 ${value}，移除后${side === 'max' ? '左' : '右'}边为空。`
+        : replacingRoot
+        ? `移出堆顶 ${value}，把末尾值 ${state.heap[0]} 暂放到根位置，接下来向下检查。`
+        : state.swapped
+          ? `比较位置 ${state.from} 的 ${state.beforeHeap[state.from]} 和位置 ${state.to} 的 ${state.beforeHeap[state.to]}，${relation}的值上移一步。`
+          : `检查根位置 ${state.from} 与子节点；当前节点已满足堆序，不再下沉。`;
+      pushStep({
+        title: removingOnlyRoot || replacingRoot ? `删除${side === 'max' ? '左' : '右'}堆顶` : finalCheck ? '确认堆序恢复' : state.swapped ? '向下恢复堆序' : '下沉结束',
+        description: narration,
+        codeLines: { java: side === 'max' ? [9] : [19], python: side === 'max' ? [9] : [18], golang: side === 'max' ? [12] : [22], javascript: side === 'max' ? [9] : [104] },
+        maxHeap: [...leftHeap], minHeap: [...rightHeap], currentNum: value, narratedValue: value,
+        sourceHeap: side, targetHeap: side === 'max' ? 'min' : 'max', focusHeap: side,
+        focusIndices: [state.from], compareIndices: state.from === state.to ? undefined : [state.from, state.to],
+        sortedValues: removingOnlyRoot || replacingRoot
+          ? [...beforeLeftHeap, ...beforeRightHeap].sort((a, b) => a - b)
+          : [...leftHeap, ...rightHeap].sort((a, b) => a - b),
+        action: removingOnlyRoot || replacingRoot ? 'remove' : operation,
+        variables: { moved: value, index: state.from, child: state.to, swapped: state.swapped ? '是' : '否' },
+        annotations: [],
+      });
+    });
+  };
   
   // 堆操作辅助函数
-  const pushMaxHeap = (arr: number[], val: number): Array<{ child: number; parent: number; heap: number[] }> => {
-    const swaps: Array<{ child: number; parent: number; heap: number[] }> = [];
+  const pushMaxHeap = (arr: number[], val: number): Array<{ child: number; parent: number; heap: number[]; beforeHeap: number[]; kind: 'insert' | 'compare' | 'swap'; swapped: boolean }> => {
+    const swaps: Array<{ child: number; parent: number; heap: number[]; beforeHeap: number[]; kind: 'insert' | 'compare' | 'swap'; swapped: boolean }> = [];
     arr.push(val);
-    swaps.push({ child: arr.length - 1, parent: -1, heap: [...arr] });
+    swaps.push({ child: arr.length - 1, parent: -1, heap: [...arr], beforeHeap: arr.slice(0, -1), kind: 'insert', swapped: false });
     let i = arr.length - 1;
     while (i > 0) {
       const parent = Math.floor((i - 1) / 2);
-      if (arr[parent] < arr[i]) {
-        [arr[parent], arr[i]] = [arr[i], arr[parent]];
-        swaps.push({ child: i, parent, heap: [...arr] });
-        i = parent;
-      } else break;
+      const beforeHeap = [...arr];
+      const shouldSwap = arr[parent] < arr[i];
+      if (shouldSwap) [arr[parent], arr[i]] = [arr[i], arr[parent]];
+      swaps.push({ child: i, parent, heap: [...arr], beforeHeap, kind: shouldSwap ? 'swap' : 'compare', swapped: shouldSwap });
+      if (shouldSwap) i = parent;
+      else break;
     }
     return swaps;
   };
   
-  const popMaxHeap = (arr: number[]): number => {
-    const result = arr[0];
+  const popMaxHeap = (arr: number[]): { value: number; states: Array<{ heap: number[]; beforeHeap: number[]; from: number; to: number; swapped: boolean }> } => {
+    const beforeRemoval = [...arr];
+    const value = arr[0];
     const last = arr.pop()!;
+    const states: Array<{ heap: number[]; beforeHeap: number[]; from: number; to: number; swapped: boolean }> = [];
+    if (arr.length === 0) states.push({ heap: [], beforeHeap: beforeRemoval, from: 0, to: -1, swapped: false });
     if (arr.length > 0) {
+      const beforeHeap = [...arr];
       arr[0] = last;
+      states.push({ heap: [...arr], beforeHeap: [...beforeHeap], from: arr.length, to: 0, swapped: false });
       let i = 0;
       while (true) {
         const left = 2 * i + 1;
@@ -138,35 +183,46 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         if (left < arr.length && arr[left] > arr[largest]) largest = left;
         if (right < arr.length && arr[right] > arr[largest]) largest = right;
         if (largest !== i) {
+          const beforeHeap = [...arr];
           [arr[i], arr[largest]] = [arr[largest], arr[i]];
+          states.push({ heap: [...arr], beforeHeap: [...beforeHeap], from: i, to: largest, swapped: true });
           i = largest;
-        } else break;
+        } else {
+          states.push({ heap: [...arr], beforeHeap: [...arr], from: i, to: i, swapped: false });
+          break;
+        }
       }
     }
-    return result;
+    return { value, states };
   };
   
-  const pushMinHeap = (arr: number[], val: number): Array<{ child: number; parent: number; heap: number[] }> => {
-    const swaps: Array<{ child: number; parent: number; heap: number[] }> = [];
+  const pushMinHeap = (arr: number[], val: number): Array<{ child: number; parent: number; heap: number[]; beforeHeap: number[]; kind: 'insert' | 'compare' | 'swap'; swapped: boolean }> => {
+    const swaps: Array<{ child: number; parent: number; heap: number[]; beforeHeap: number[]; kind: 'insert' | 'compare' | 'swap'; swapped: boolean }> = [];
     arr.push(val);
-    swaps.push({ child: arr.length - 1, parent: -1, heap: [...arr] });
+    swaps.push({ child: arr.length - 1, parent: -1, heap: [...arr], beforeHeap: arr.slice(0, -1), kind: 'insert', swapped: false });
     let i = arr.length - 1;
     while (i > 0) {
       const parent = Math.floor((i - 1) / 2);
-      if (arr[parent] > arr[i]) {
-        [arr[parent], arr[i]] = [arr[i], arr[parent]];
-        swaps.push({ child: i, parent, heap: [...arr] });
-        i = parent;
-      } else break;
+      const beforeHeap = [...arr];
+      const shouldSwap = arr[parent] > arr[i];
+      if (shouldSwap) [arr[parent], arr[i]] = [arr[i], arr[parent]];
+      swaps.push({ child: i, parent, heap: [...arr], beforeHeap, kind: shouldSwap ? 'swap' : 'compare', swapped: shouldSwap });
+      if (shouldSwap) i = parent;
+      else break;
     }
     return swaps;
   };
   
-  const popMinHeap = (arr: number[]): number => {
-    const result = arr[0];
+  const popMinHeap = (arr: number[]): { value: number; states: Array<{ heap: number[]; beforeHeap: number[]; from: number; to: number; swapped: boolean }> } => {
+    const beforeRemoval = [...arr];
+    const value = arr[0];
     const last = arr.pop()!;
+    const states: Array<{ heap: number[]; beforeHeap: number[]; from: number; to: number; swapped: boolean }> = [];
+    if (arr.length === 0) states.push({ heap: [], beforeHeap: beforeRemoval, from: 0, to: -1, swapped: false });
     if (arr.length > 0) {
+      const beforeHeap = [...arr];
       arr[0] = last;
+      states.push({ heap: [...arr], beforeHeap: [...beforeHeap], from: arr.length, to: 0, swapped: false });
       let i = 0;
       while (true) {
         const left = 2 * i + 1;
@@ -175,12 +231,17 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         if (left < arr.length && arr[left] < arr[smallest]) smallest = left;
         if (right < arr.length && arr[right] < arr[smallest]) smallest = right;
         if (smallest !== i) {
+          const beforeHeap = [...arr];
           [arr[i], arr[smallest]] = [arr[smallest], arr[i]];
+          states.push({ heap: [...arr], beforeHeap: [...beforeHeap], from: i, to: smallest, swapped: true });
           i = smallest;
-        } else break;
+        } else {
+          states.push({ heap: [...arr], beforeHeap: [...arr], from: i, to: i, swapped: false });
+          break;
+        }
       }
     }
-    return result;
+    return { value, states };
   };
   
   // 初始化步骤
@@ -238,25 +299,28 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
       if (goesLeft) {
         const maxSwaps = pushMaxHeap(maxHeap, num);
         const placedHeap = [...maxHeap];
-        maxSwaps.forEach(({ child, parent, heap }, swapIndex) => {
-          if (parent === -1) {
-            pushStep({
-              title: '放到大顶堆末尾',
-              description: `先把 ${num} 放进下一个空位置（堆内位置 ${child}），再从底向上检查父节点。`,
-              codeLines: { java: [6], python: [6], golang: [9], javascript: [6] },
-              maxHeap: heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: [child],
-              narratedValue: num, targetHeap: 'max', sortedValues: snapshot(), action: 'insert',
-              variables: { num, child, 'maxHeap.size': heap.length }, annotations: [],
-            });
-            return;
-          }
-          pushStep({
-            title: `恢复大顶堆顺序（第 ${swapIndex} 次交换）`,
-            description: `子节点 ${heap[child]} 大于父节点 ${heap[parent]}，交换位置 ${child} 和 ${parent}，让较大的值向堆顶移动。`,
+        maxSwaps.forEach(({ child, parent, heap, beforeHeap, kind, swapped }, swapIndex) => {
+          const indices = parent < 0 ? [child] : [child, parent];
+          if (swapped && parent >= 0) pushStep({
+            title: `比较父子节点 ${beforeHeap[child]} 与 ${beforeHeap[parent]}`,
+            description: `新值 ${beforeHeap[child]} 大于父节点 ${beforeHeap[parent]}，违反大顶堆顺序，下一步要交换。`,
             codeLines: { java: [6], python: [6], golang: [9], javascript: [6] },
-            maxHeap: heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: [parent], compareIndices: [child, parent],
-            narratedValue: num, targetHeap: 'max', sortedValues: snapshot(), action: 'swap',
-            variables: { num, child, parent, 'maxHeap.top': heap[0] }, annotations: [],
+            maxHeap: beforeHeap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: [child], compareIndices: indices,
+            narratedValue: num, targetHeap: 'max', sortedValues: [...beforeHeap, ...minHeap].sort((a, b) => a - b),
+            action: 'compare', variables: { num, child, parent, 'maxHeap.top': beforeHeap[0] }, annotations: [],
+          });
+          pushStep({
+            title: parent < 0 ? '放到大顶堆末尾' : swapped ? `恢复大顶堆顺序（第 ${swapIndex} 次交换）` : '父子顺序正确，不必交换',
+            description: parent < 0
+              ? `先把 ${num} 放进下一个空位置（堆内位置 ${child}），再从底向上检查父节点。`
+              : swapped
+                ? `子节点 ${beforeHeap[child]} 大于父节点 ${beforeHeap[parent]}，交换位置 ${child} 和 ${parent}，让较大的值向堆顶移动。`
+                : `比较子节点 ${beforeHeap[child]} 与父节点 ${beforeHeap[parent]}；父节点更大，满足大顶堆规则，停止上滤。`,
+            codeLines: { java: [6], python: [6], golang: [9], javascript: [6] },
+            maxHeap: heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: swapped && parent >= 0 ? [parent] : [child],
+            compareIndices: parent >= 0 ? indices : undefined, narratedValue: num, targetHeap: 'max',
+            sortedValues: [...heap, ...minHeap].sort((a, b) => a - b), action: kind,
+            variables: { num, child, parent, 'maxHeap.top': heap[0], swapped: swapped ? '是' : '否' }, annotations: [],
           });
         });
         pushStep({
@@ -280,7 +344,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         
         // 步骤3: 平衡检查
         if (maxHeap.length > minHeap.length + 1) {
-          const moved = maxHeap[0];
+          const { value: moved, states: popStates } = popMaxHeap(maxHeap);
           pushStep({
             title: '检查数量：左边多了两个',
             description: `左边 ${maxHeap.length} 个、右边 ${minHeap.length} 个，左边超过右边不止 1 个，需要移动一个边界数。`,
@@ -288,22 +352,24 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
             maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), action: 'compare',
             variables: { 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length }, annotations: [],
           });
-          pushStep({
-            title: `从左边取出最大值 ${moved}`,
-            description: `左边最大的 ${moved} 最接近右半边；把它移到右边不会破坏从小到大的分界。`,
-            codeLines: { java: [9], python: [9], golang: [12], javascript: [9] },
-            maxHeap: [...maxHeap.slice(1)], minHeap: [...minHeap], narratedValue: moved, currentNum: moved,
-            sourceHeap: 'max', targetHeap: 'min', focusHeap: 'max', focusIndices: [0], sortedValues: snapshot(), action: 'remove',
-            variables: { moved, 'maxHeap.top': moved, 'maxHeap.size': maxHeap.length }, annotations: [],
-          });
-          popMaxHeap(maxHeap);
+          emitPopSteps('max', moved, popStates, minHeap);
           const minSwaps = pushMinHeap(minHeap, moved);
-          minSwaps.forEach(({ child, parent, heap }) => {
-            if (parent === -1) {
-              pushStep({ title: `把 ${moved} 放到右堆末尾`, description: `从左堆取出的 ${moved} 先占据右堆下一个空位置。`, codeLines: { java: [10], python: [9], golang: [13], javascript: [10] }, maxHeap: [...maxHeap], minHeap: heap, focusHeap: 'min', focusIndices: [child], narratedValue: moved, sourceHeap: 'max', targetHeap: 'min', sortedValues: snapshot(), action: 'insert', variables: { moved, child }, annotations: [] });
-              return;
-            }
-            pushStep({ title: '调整右堆顺序', description: `为了让小顶堆仍然有效，${heap[child]} 与父节点 ${heap[parent]} 交换位置。`, codeLines: { java: [10], python: [9], golang: [13], javascript: [10] }, maxHeap: [...maxHeap], minHeap: heap, focusHeap: 'min', focusIndices: [parent], compareIndices: [child, parent], narratedValue: moved, sourceHeap: 'max', targetHeap: 'min', sortedValues: snapshot(), action: 'swap', variables: { moved, child, parent }, annotations: [] });
+          minSwaps.forEach(({ child, parent, heap, beforeHeap, kind, swapped }, swapIndex) => {
+            const indices = parent < 0 ? [child] : [child, parent];
+            if (swapped && parent >= 0) pushStep({ title: `比较右堆父子节点 ${beforeHeap[child]} 与 ${beforeHeap[parent]}`, description: `子节点 ${beforeHeap[child]} 小于父节点 ${beforeHeap[parent]}，下一步交换以恢复小顶堆。`, codeLines: { java: [10], python: [9], golang: [13], javascript: [10] }, maxHeap: [...maxHeap], minHeap: beforeHeap, focusHeap: 'min', focusIndices: [child], compareIndices: [child, parent], narratedValue: moved, sourceHeap: 'max', targetHeap: 'min', sortedValues: [...maxHeap, ...beforeHeap].sort((a, b) => a - b), action: 'compare', variables: { moved, child, parent }, annotations: [] });
+            pushStep({
+              title: parent < 0 ? `把 ${moved} 放到右堆末尾` : swapped ? `恢复右堆顺序（第 ${swapIndex} 次交换）` : '父子顺序正确，不必交换',
+              description: parent < 0
+                ? `从左堆取出的 ${moved} 先占据右堆下一个空位置。`
+                : swapped
+                  ? `子节点 ${beforeHeap[child]} 小于父节点 ${beforeHeap[parent]}，交换后继续向堆顶调整。`
+                  : `比较子节点 ${beforeHeap[child]} 和父节点 ${beforeHeap[parent]}；无需交换，右堆已满足小顶堆规则。`,
+              codeLines: { java: [10], python: [9], golang: [13], javascript: [10] },
+              maxHeap: [...maxHeap], minHeap: heap, focusHeap: 'min', focusIndices: swapped && parent >= 0 ? [parent] : [child],
+              compareIndices: parent >= 0 ? indices : undefined, narratedValue: moved, sourceHeap: 'max', targetHeap: 'min',
+              sortedValues: [...maxHeap, ...heap].sort((a, b) => a - b), action: kind,
+              variables: { moved, child, parent, swapped: swapped ? '是' : '否' }, annotations: [],
+            });
           });
           steps.push({
             id: stepId++,
@@ -324,25 +390,28 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         }
       } else {
         const minSwaps = pushMinHeap(minHeap, num);
-        minSwaps.forEach(({ child, parent, heap }, swapIndex) => {
-          if (parent === -1) {
-            pushStep({
-              title: '放到小顶堆末尾',
-              description: `先把 ${num} 放进右堆下一个空位置（堆内位置 ${child}），再向上检查是否需要交换。`,
-              codeLines: { java: [12], python: [11], golang: [15], javascript: [12] },
-              maxHeap: [...maxHeap], minHeap: heap, focusHeap: 'min', focusIndices: [child],
-              narratedValue: num, targetHeap: 'min', sortedValues: [...maxHeap, ...heap].sort((a, b) => a - b), action: 'insert',
-              variables: { num, child, 'minHeap.size': heap.length }, annotations: [],
-            });
-            return;
-          }
-          pushStep({
-            title: `恢复小顶堆顺序（第 ${swapIndex} 次交换）`,
-            description: `子节点 ${heap[child]} 小于父节点 ${heap[parent]}，交换位置 ${child} 和 ${parent}，让较小值向堆顶移动。`,
+        minSwaps.forEach(({ child, parent, heap, beforeHeap, kind, swapped }, swapIndex) => {
+          const indices = parent < 0 ? [child] : [child, parent];
+          if (swapped && parent >= 0) pushStep({
+            title: `比较右堆父子节点 ${beforeHeap[child]} 与 ${beforeHeap[parent]}`,
+            description: `右堆子节点 ${beforeHeap[child]} 小于父节点 ${beforeHeap[parent]}，违反小顶堆顺序，下一步要交换。`,
             codeLines: { java: [12], python: [11], golang: [15], javascript: [12] },
-            maxHeap: [...maxHeap], minHeap: heap, focusHeap: 'min', focusIndices: [parent], compareIndices: [child, parent],
-            narratedValue: num, targetHeap: 'min', sortedValues: snapshot(), action: 'swap',
-            variables: { num, child, parent, 'minHeap.top': heap[0] }, annotations: [],
+            maxHeap: [...maxHeap], minHeap: swapped ? beforeHeap : heap, focusHeap: 'min', focusIndices: [child], compareIndices: indices,
+            narratedValue: num, targetHeap: 'min', sortedValues: [...maxHeap, ...(swapped ? beforeHeap : heap)].sort((a, b) => a - b),
+            action: 'compare', variables: { num, child, parent, 'minHeap.top': beforeHeap[0] }, annotations: [],
+          });
+          pushStep({
+            title: parent < 0 ? '放到小顶堆末尾' : swapped ? `恢复小顶堆顺序（第 ${swapIndex} 次交换）` : '父子顺序正确，不必交换',
+            description: parent < 0
+              ? `先把 ${num} 放进右堆下一个空位置（堆内位置 ${child}），再向上检查是否需要交换。`
+              : swapped
+                ? `子节点 ${beforeHeap[child]} 小于父节点 ${beforeHeap[parent]}，交换位置 ${child} 和 ${parent}，让较小值向堆顶移动。`
+                : `比较子节点 ${beforeHeap[child]} 与父节点 ${beforeHeap[parent]}；父节点更小，满足小顶堆规则，停止上滤。`,
+            codeLines: { java: [12], python: [11], golang: [15], javascript: [12] },
+            maxHeap: [...maxHeap], minHeap: heap, focusHeap: 'min', focusIndices: swapped && parent >= 0 ? [parent] : [child],
+            compareIndices: parent >= 0 ? indices : undefined, narratedValue: num, targetHeap: 'min',
+            sortedValues: [...maxHeap, ...heap].sort((a, b) => a - b), action: kind,
+            variables: { num, child, parent, 'minHeap.top': heap[0], swapped: swapped ? '是' : '否' }, annotations: [],
           });
         });
         pushStep({
@@ -372,7 +441,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         
         // 步骤3: 平衡检查
         if (minHeap.length > maxHeap.length) {
-          const moved = minHeap[0];
+          const { value: moved, states: popStates } = popMinHeap(minHeap);
           pushStep({
             title: '检查数量：右边多了一个',
             description: `左边 ${maxHeap.length} 个，右边 ${minHeap.length} 个；允许左边比右边多 1 个，不允许右边反而更多。`,
@@ -380,22 +449,24 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
             maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), action: 'compare',
             variables: { 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length }, annotations: [],
           });
-          pushStep({
-            title: `从右边取出最小值 ${moved}`,
-            description: `右边最小的 ${moved} 正好是两边的分界；移到左边后，所有左侧数字仍不大于右侧数字。`,
-            codeLines: { java: [19], python: [18], golang: [22], javascript: [104] },
-            maxHeap: [...maxHeap], minHeap: [...minHeap.slice(1)], narratedValue: moved, currentNum: moved,
-            sourceHeap: 'min', targetHeap: 'max', focusHeap: 'min', focusIndices: [0], sortedValues: snapshot(), action: 'remove',
-            variables: { moved, 'minHeap.top': moved, 'minHeap.size': minHeap.length }, annotations: [],
-          });
-          popMinHeap(minHeap);
+          emitPopSteps('min', moved, popStates, maxHeap);
           const maxSwaps = pushMaxHeap(maxHeap, moved);
-          maxSwaps.forEach(({ child, parent, heap }) => {
-            if (parent === -1) {
-              pushStep({ title: `把 ${moved} 放到左堆末尾`, description: `从右堆取出的 ${moved} 先占据左堆下一个空位置。`, codeLines: { java: [19], python: [18], golang: [22], javascript: [104] }, maxHeap: heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: [child], narratedValue: moved, sourceHeap: 'min', targetHeap: 'max', sortedValues: [...heap, ...minHeap].sort((a, b) => a - b), action: 'insert', variables: { moved, child }, annotations: [] });
-              return;
-            }
-            pushStep({ title: '调整左堆顺序', description: `为了让大顶堆仍然有效，${heap[child]} 与父节点 ${heap[parent]} 交换位置。`, codeLines: { java: [19], python: [18], golang: [22], javascript: [104] }, maxHeap: heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: [parent], compareIndices: [child, parent], narratedValue: moved, sourceHeap: 'min', targetHeap: 'max', sortedValues: snapshot(), action: 'swap', variables: { moved, child, parent }, annotations: [] });
+          maxSwaps.forEach(({ child, parent, heap, beforeHeap, swapped, kind }, swapIndex) => {
+            const indices = parent < 0 ? [child] : [child, parent];
+            if (swapped && parent >= 0) pushStep({ title: `比较左堆父子节点 ${beforeHeap[child]} 与 ${beforeHeap[parent]}`, description: `子节点 ${beforeHeap[child]} 大于父节点 ${beforeHeap[parent]}，下一步交换以恢复大顶堆。`, codeLines: { java: [19], python: [18], golang: [22], javascript: [104] }, maxHeap: heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: [child], compareIndices: [child, parent], narratedValue: moved, sourceHeap: 'min', targetHeap: 'max', sortedValues: [...heap, ...minHeap].sort((a, b) => a - b), action: 'compare', variables: { moved, child, parent }, annotations: [] });
+            pushStep({
+              title: parent < 0 ? `把 ${moved} 放到左堆末尾` : swapped ? `恢复左堆顺序（第 ${swapIndex} 次交换）` : '左堆父子顺序正确',
+              description: parent < 0
+                ? `从右堆取出的 ${moved} 先占据左堆下一个空位置。`
+                : swapped
+                  ? `左堆子节点 ${beforeHeap[child]} 大于父节点 ${beforeHeap[parent]}，交换后继续检查。`
+                  : `比较左堆子节点 ${beforeHeap[child]} 与父节点 ${beforeHeap[parent]}；无需交换，大顶堆规则已满足。`,
+              codeLines: { java: [19], python: [18], golang: [22], javascript: [104] },
+              maxHeap: heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: swapped && parent >= 0 ? [parent] : [child],
+              compareIndices: parent >= 0 ? indices : undefined, narratedValue: moved, sourceHeap: 'min', targetHeap: 'max',
+              sortedValues: [...heap, ...minHeap].sort((a, b) => a - b), action: kind,
+              variables: { moved, child, parent, swapped: swapped ? '是' : '否' }, annotations: [],
+            });
           });
           steps.push({
             id: stepId++,

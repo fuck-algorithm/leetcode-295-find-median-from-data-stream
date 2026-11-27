@@ -109,7 +109,8 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
     nodeIdsRef.current = minStable.next;
     const maxNodes = layoutHeap(currentStep.maxHeap, 'max', maxCenter, maxStable.ids);
     const minNodes = layoutHeap(currentStep.minHeap, 'min', minCenter, minStable.ids);
-    const incoming = currentStep.currentNum ?? (currentStep.action === 'add' || currentStep.action === 'insert' || currentStep.action === 'remove' ? currentStep.narratedValue : undefined);
+    const incoming = currentStep.currentNum ?? (currentStep.action === 'add' || currentStep.action === 'insert' ? currentStep.narratedValue : undefined);
+    const departing = currentStep.action === 'remove' ? currentStep.currentNum ?? currentStep.narratedValue : undefined;
     const moved = currentStep.action === 'balance' ? currentStep.narratedValue : currentStep.action === 'swap' ? currentStep.narratedValue : undefined;
     const nodes = [...maxNodes, ...minNodes];
     const transitionMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 240;
@@ -228,7 +229,9 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
       .attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 600).attr('fill', colors.ink).text(datum => datum.text);
 
     const visibleValues = [...ordered];
-    if (currentStep.action === 'compare' && incoming !== undefined && !visibleValues.includes(incoming)) visibleValues.push(incoming);
+    if ((currentStep.action === 'compare' || currentStep.action === 'remove' || (currentStep.action === 'insert' && currentStep.sourceHeap))
+      && incoming !== undefined && !visibleValues.includes(incoming)) visibleValues.push(incoming);
+    if (departing !== undefined && !visibleValues.includes(departing)) visibleValues.push(departing);
     visibleValues.sort((a, b) => a - b);
     const railWidth = Math.min(width - 48, 560);
     const gap = 6;
@@ -240,7 +243,7 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
     const rail: SortedValueData[] = visibleValues.map((value, index) => ({
       id: `${value}:${visibleValues.slice(0, index).filter(item => item === value).length}`,
       value, index, x: width / 2 - totalWidth / 2 + index * (pillWidth + gap) + pillWidth / 2,
-      y: 176, isMedian: isQuery && (index === middleLeft || index === middleRight), isIncoming: value === incoming,
+      y: 176, isMedian: isQuery && (index === middleLeft || index === middleRight), isIncoming: value === incoming || value === departing,
     }));
     const sortedLayer = root.select<SVGGElement>('.layer-labels');
     const pills = sortedLayer.selectAll<SVGGElement, SortedValueData>('g.sorted-value')
@@ -287,7 +290,7 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
       .attr('x', 18).attr('y', datum => datum.y).attr('width', width - 36).attr('height', datum => datum.height)
       .attr('rx', 10).attr('fill', datum => datum.fill).attr('stroke', datum => datum.stroke);
     const operationText: Record<AlgorithmStep['action'], string> = {
-      init: '先分成两半', add: currentStep.title ?? '放入新数字', insert: currentStep.title ?? '放入堆底', remove: currentStep.title ?? '移出堆顶', compare: currentStep.action === 'compare' && currentStep.title ? currentStep.title : currentStep.currentNum === undefined ? '判断中间位置' : '比较边界值', swap: currentStep.title ?? '交换以恢复堆序', balance: currentStep.title ?? '移动边界数', findMedian: currentStep.title ?? '读取中位数', complete: '完成',
+      init: '先分成两半', add: currentStep.title ?? '放入新数字', insert: currentStep.title ?? '放入堆底', remove: currentStep.title ?? '移出堆顶', compare: currentStep.title ?? (currentStep.currentNum === undefined ? '判断中间位置' : '比较边界值'), swap: currentStep.title ?? '交换以恢复堆序', balance: currentStep.title ?? '移动边界数', findMedian: currentStep.title ?? '读取中位数', complete: '完成',
     };
     const narration = [
       { id: 'action', x: 32, y: explanationY + 24, text: operationText[currentStep.action], fill: '#8a5c08', weight: 700 },
