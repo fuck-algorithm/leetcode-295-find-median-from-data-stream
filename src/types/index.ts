@@ -20,7 +20,7 @@ export interface AlgorithmStep {
   focusIndices?: number[];
   compareIndices?: number[];
   title?: string;
-  action: 'init' | 'add' | 'insert' | 'remove' | 'compare' | 'swap' | 'balance' | 'findMedian' | 'complete';
+  action: 'init' | 'add' | 'insert' | 'remove' | 'compare' | 'swap' | 'balance' | 'findMedian' | 'return' | 'complete';
   variables: Record<string, string | number | null>;
   annotations: Annotation[];
 }

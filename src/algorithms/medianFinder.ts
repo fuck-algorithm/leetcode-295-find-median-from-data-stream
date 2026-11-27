@@ -317,9 +317,9 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
                 ? `子节点 ${beforeHeap[child]} 大于父节点 ${beforeHeap[parent]}，交换位置 ${child} 和 ${parent}，让较大的值向堆顶移动。`
                 : `比较子节点 ${beforeHeap[child]} 与父节点 ${beforeHeap[parent]}；父节点更大，满足大顶堆规则，停止上滤。`,
             codeLines: { java: [6], python: [6], golang: [9], javascript: [6] },
-            maxHeap: heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: swapped && parent >= 0 ? [parent] : [child],
+            maxHeap: kind === 'compare' ? beforeHeap : heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: swapped && parent >= 0 ? [parent] : [child],
             compareIndices: parent >= 0 ? indices : undefined, narratedValue: num, targetHeap: 'max',
-            sortedValues: [...heap, ...minHeap].sort((a, b) => a - b), action: kind,
+            sortedValues: [...(kind === 'compare' ? beforeHeap : heap), ...minHeap].sort((a, b) => a - b), action: kind,
             variables: { num, child, parent, 'maxHeap.top': heap[0], swapped: swapped ? '是' : '否' }, annotations: [],
           });
         });
@@ -396,8 +396,8 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
             title: `比较右堆父子节点 ${beforeHeap[child]} 与 ${beforeHeap[parent]}`,
             description: `右堆子节点 ${beforeHeap[child]} 小于父节点 ${beforeHeap[parent]}，违反小顶堆顺序，下一步要交换。`,
             codeLines: { java: [12], python: [11], golang: [15], javascript: [12] },
-            maxHeap: [...maxHeap], minHeap: swapped ? beforeHeap : heap, focusHeap: 'min', focusIndices: [child], compareIndices: indices,
-            narratedValue: num, targetHeap: 'min', sortedValues: [...maxHeap, ...(swapped ? beforeHeap : heap)].sort((a, b) => a - b),
+            maxHeap: [...maxHeap], minHeap: beforeHeap, focusHeap: 'min', focusIndices: [child], compareIndices: indices,
+            narratedValue: num, targetHeap: 'min', sortedValues: [...maxHeap, ...beforeHeap].sort((a, b) => a - b),
             action: 'compare', variables: { num, child, parent, 'minHeap.top': beforeHeap[0] }, annotations: [],
           });
           pushStep({
@@ -408,9 +408,9 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
                 ? `子节点 ${beforeHeap[child]} 小于父节点 ${beforeHeap[parent]}，交换位置 ${child} 和 ${parent}，让较小值向堆顶移动。`
                 : `比较子节点 ${beforeHeap[child]} 与父节点 ${beforeHeap[parent]}；父节点更小，满足小顶堆规则，停止上滤。`,
             codeLines: { java: [12], python: [11], golang: [15], javascript: [12] },
-            maxHeap: [...maxHeap], minHeap: heap, focusHeap: 'min', focusIndices: swapped && parent >= 0 ? [parent] : [child],
+            maxHeap: [...maxHeap], minHeap: kind === 'compare' ? beforeHeap : heap, focusHeap: 'min', focusIndices: swapped && parent >= 0 ? [parent] : [child],
             compareIndices: parent >= 0 ? indices : undefined, narratedValue: num, targetHeap: 'min',
-            sortedValues: [...maxHeap, ...heap].sort((a, b) => a - b), action: kind,
+            sortedValues: [...maxHeap, ...(kind === 'compare' ? beforeHeap : heap)].sort((a, b) => a - b), action: kind,
             variables: { num, child, parent, 'minHeap.top': heap[0], swapped: swapped ? '是' : '否' }, annotations: [],
           });
         });
@@ -500,13 +500,14 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
       if (maxHeap.length > minHeap.length) {
         median = maxHeap[0];
         pushStep({
-          title: '总数为奇数，读取左堆顶',
-          description: `左边有 ${maxHeap.length} 个、右边有 ${minHeap.length} 个；左边多一个，因此左边最大值 ${median} 就在正中间。`,
-          codeLines: { java: [28, 29], python: [51, 52], golang: [83, 84], javascript: [110, 111] },
+          title: '读取左边中间边界',
+          description: `左边有 ${maxHeap.length} 个、右边有 ${minHeap.length} 个；左边多一个，因此读取左堆顶 ${median} 作为中位数。`,
+          codeLines: { java: [29], python: [52], golang: [84], javascript: [111] },
           maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), median,
           currentNum: median, focusHeap: 'max', focusIndices: [0], action: 'compare',
           variables: { 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length, 'maxHeap.top': median }, annotations: [],
         });
+        pushStep({ title: '返回中位数', description: `中间只有一个数，所以直接返回左堆顶 ${median}。`, codeLines: { java: [29], python: [52], golang: [84], javascript: [111] }, maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), median, currentNum: median, focusHeap: 'max', focusIndices: [0], action: 'return', variables: { median, 'maxHeap.top': median }, annotations: [] });
         steps.push({
           id: stepId++,
           description: `现在有 ${totalSize} 个数，左边比右边多 1 个；左边最大值 ${median} 正好位于正中间。`,
@@ -523,14 +524,10 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         });
       } else {
         median = (maxHeap[0] + minHeap[0]) / 2;
-        pushStep({
-          title: '总数为偶数，取两个边界的平均值',
-          description: `两边各有 ${maxHeap.length} 个数字，中间落在边界之间；取左边最大值 ${maxHeap[0]} 与右边最小值 ${minHeap[0]} 的平均值。`,
-          codeLines: { java: [31], python: [53], golang: [86], javascript: [113] },
-          maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), median,
-          currentNum: maxHeap[0], focusHeap: 'max', focusIndices: [0], compareIndices: [0], action: 'compare',
-          variables: { 'maxHeap.top': maxHeap[0], 'minHeap.top': minHeap[0], median }, annotations: [],
-        });
+        pushStep({ title: '读取左边界值', description: `左边有序区的最大值是 ${maxHeap[0]}；偶数个数字时，它是两个中间值中的较小者。`, codeLines: { java: [31], python: [53], golang: [86], javascript: [113] }, maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), currentNum: maxHeap[0], focusHeap: 'max', focusIndices: [0], action: 'compare', variables: { 'maxHeap.top': maxHeap[0] }, annotations: [] });
+        pushStep({ title: '读取右边界值', description: `右边有序区的最小值是 ${minHeap[0]}；它是紧挨着左边界的另一个中间值。`, codeLines: { java: [31], python: [53], golang: [86], javascript: [113] }, maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), currentNum: minHeap[0], focusHeap: 'min', focusIndices: [0], action: 'compare', variables: { 'minHeap.top': minHeap[0] }, annotations: [] });
+        pushStep({ title: '计算两个边界的平均值', description: `偶数个数没有唯一中点，所以计算 (${maxHeap[0]} + ${minHeap[0]}) ÷ 2 = ${median}。`, codeLines: { java: [31], python: [53], golang: [86], javascript: [113] }, maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), median, action: 'compare', variables: { left: maxHeap[0], right: minHeap[0], median }, annotations: [] });
+        pushStep({ title: '返回中位数', description: `把刚才得到的平均值 ${median} 作为当前数据流的中位数返回。`, codeLines: { java: [31], python: [53], golang: [86], javascript: [113] }, maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), median, action: 'return', variables: { median }, annotations: [] });
         steps.push({
           id: stepId++,
           description: `现在有 ${totalSize} 个数，中间落在两数之间；取左边最大值 ${maxHeap[0]} 和右边最小值 ${minHeap[0]} 的平均数 ${median}。`,
@@ -558,6 +555,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
     codeLines: { java: [], python: [], golang: [], javascript: [] },
     maxHeap: [...maxHeap],
     minHeap: [...minHeap],
+    sortedValues: snapshot(),
     action: 'complete',
     variables: { 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length },
     annotations: [],
