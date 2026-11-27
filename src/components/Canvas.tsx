@@ -109,10 +109,19 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
     nodeIdsRef.current = minStable.next;
     const maxNodes = layoutHeap(currentStep.maxHeap, 'max', maxCenter, maxStable.ids);
     const minNodes = layoutHeap(currentStep.minHeap, 'min', minCenter, minStable.ids);
-    const incoming = currentStep.action === 'add' ? currentStep.narratedValue : undefined;
-    const moved = currentStep.action === 'balance' ? currentStep.narratedValue : undefined;
+    const incoming = currentStep.action === 'add' || currentStep.action === 'insert' || (currentStep.action === 'compare' && currentStep.currentNum !== undefined)
+      ? currentStep.narratedValue ?? currentStep.currentNum
+      : undefined;
+    const moved = currentStep.action === 'balance' ? currentStep.narratedValue : currentStep.action === 'swap' ? currentStep.narratedValue : undefined;
     const nodes = [...maxNodes, ...minNodes];
+    const transitionMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 240;
 
+    if (currentStep.focusHeap && currentStep.focusIndices) {
+      nodes.forEach(node => {
+        if (node.heap === currentStep.focusHeap && currentStep.focusIndices?.includes(node.index)) node.status = 'current';
+        if (node.heap === currentStep.focusHeap && currentStep.compareIndices?.includes(node.index)) node.status = 'boundary';
+      });
+    }
     if (incoming !== undefined) {
       const targetHeap = currentStep.targetHeap ?? (currentStep.maxHeap.length === 0 || incoming <= currentStep.maxHeap[0] ? 'max' : 'min');
       const target = nodes.find(node => node.value === incoming && node.heap === targetHeap);
@@ -168,8 +177,26 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
         exit => exit.transition('exit').duration(140).attr('opacity', 0).remove(),
       );
     groups.interrupt('move').interrupt('exit')
-      .transition('move').duration(window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 240)
+      .transition('move').duration(transitionMs)
       .attr('transform', datum => `translate(${datum.x}, ${datum.y})`).attr('opacity', 1);
+    if (currentStep.action !== 'swap') root.select('.layer-arrows').selectAll('*').remove();
+    if (currentStep.action === 'swap' && currentStep.focusHeap && currentStep.compareIndices?.length === 2) {
+      const [childIndex, parentIndex] = currentStep.compareIndices;
+      const child = nodes.find(node => node.heap === currentStep.focusHeap && node.index === childIndex);
+      const parent = nodes.find(node => node.heap === currentStep.focusHeap && node.index === parentIndex);
+      if (child && parent) {
+        const arrowLayer = root.select<SVGGElement>('.layer-arrows');
+        const swaps = [{ id: 'heap-swap', from: child, to: parent }];
+        arrowLayer.selectAll<SVGLineElement, typeof swaps[number]>('line.heap-swap')
+          .data(swaps, datum => datum.id)
+          .join('line').attr('class', 'heap-swap')
+          .attr('x1', datum => datum.from.x).attr('y1', datum => datum.from.y)
+          .attr('x2', datum => datum.from.x).attr('y2', datum => datum.from.y)
+          .attr('stroke', colors.current).attr('stroke-width', 3).attr('marker-end', 'url(#arrow)')
+          .transition('swap').duration(transitionMs)
+          .attr('x2', datum => datum.to.x).attr('y2', datum => datum.to.y);
+      }
+    }
     groups.select('circle').attr('r', nodeRadius)
       .attr('fill', datum => datum.status === 'current' ? colors.current : datum.heap === 'max' ? colors.max : colors.min)
       .attr('stroke', datum => datum.status === 'boundary' ? '#e9ad43' : '#ffffff')
@@ -243,9 +270,13 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
 
     const hint = currentStep.action === 'balance' && currentStep.narratedValue !== undefined
       ? `把 ${currentStep.narratedValue} 从${currentStep.sourceHeap === 'max' ? '左边' : '右边'}移到${currentStep.targetHeap === 'max' ? '左边' : '右边'}，让两边数量接近。`
-      : incoming !== undefined
-        ? (currentStep.maxHeap.length ? `${incoming} ${incoming <= currentStep.maxHeap[0] ? '≤' : '>'} 左边最大值 ${currentStep.maxHeap[0]}，放到${incoming <= currentStep.maxHeap[0] ? '左' : '右'}边。` : `左边还没有数，先把 ${incoming} 放到左边。`)
-        : currentStep.description;
+      : currentStep.action === 'swap'
+        ? (currentStep.compareIndices?.[0] === currentStep.focusIndices?.[0] ? currentStep.description : `比较堆中位置 ${currentStep.compareIndices?.join(' 和 ')}，交换后父节点继续保持堆顶规则。`)
+        : currentStep.action === 'insert' || (currentStep.action === 'compare' && currentStep.currentNum === undefined)
+          ? currentStep.description
+          : incoming !== undefined
+            ? (currentStep.maxHeap.length ? `${incoming} ${incoming <= currentStep.maxHeap[0] ? '≤' : '>'} 左边最大值 ${currentStep.maxHeap[0]}，放到${incoming <= currentStep.maxHeap[0] ? '左' : '右'}边。` : `左边还没有数，先把 ${incoming} 放到左边。`)
+            : currentStep.description;
     const explanationY = height - 58;
     const cards = [{ id: 'explanation', y: explanationY, height: 40, fill: '#fff8e8', stroke: '#f0d799' }];
     teaching.selectAll<SVGRectElement, typeof cards[number]>('rect.teaching-card')
@@ -253,7 +284,7 @@ export const Canvas: React.FC<CanvasProps> = ({ currentStep }) => {
       .attr('x', 18).attr('y', datum => datum.y).attr('width', width - 36).attr('height', datum => datum.height)
       .attr('rx', 10).attr('fill', datum => datum.fill).attr('stroke', datum => datum.stroke);
     const operationText: Record<AlgorithmStep['action'], string> = {
-      init: '先分成两半', add: '放入新数字', balance: '移动边界数', findMedian: '读取中位数', complete: '完成',
+      init: '先分成两半', add: currentStep.title ?? '放入新数字', insert: currentStep.title ?? '放入堆底', compare: currentStep.currentNum === undefined ? (currentStep.title ?? '判断中间位置') : (currentStep.title ?? '比较新数字'), swap: currentStep.title ?? '交换以恢复堆序', balance: currentStep.title ?? '移动边界数', findMedian: currentStep.title ?? '读取中位数', complete: '完成',
     };
     const narration = [
       { id: 'action', x: 32, y: explanationY + 24, text: operationText[currentStep.action], fill: '#8a5c08', weight: 700 },

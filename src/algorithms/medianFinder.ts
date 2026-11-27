@@ -105,18 +105,24 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
   const maxHeap: number[] = [];
   // 小顶堆（存储较大的一半）
   const minHeap: number[] = [];
+  const snapshot = () => [...maxHeap, ...minHeap].sort((a, b) => a - b);
+  const pushStep = (step: Omit<AlgorithmStep, 'id'>) => steps.push({ id: stepId++, ...step });
   
   // 堆操作辅助函数
-  const pushMaxHeap = (arr: number[], val: number) => {
+  const pushMaxHeap = (arr: number[], val: number): Array<{ child: number; parent: number; heap: number[] }> => {
+    const swaps: Array<{ child: number; parent: number; heap: number[] }> = [];
     arr.push(val);
+    swaps.push({ child: arr.length - 1, parent: -1, heap: [...arr] });
     let i = arr.length - 1;
     while (i > 0) {
       const parent = Math.floor((i - 1) / 2);
       if (arr[parent] < arr[i]) {
         [arr[parent], arr[i]] = [arr[i], arr[parent]];
+        swaps.push({ child: i, parent, heap: [...arr] });
         i = parent;
       } else break;
     }
+    return swaps;
   };
   
   const popMaxHeap = (arr: number[]): number => {
@@ -140,16 +146,20 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
     return result;
   };
   
-  const pushMinHeap = (arr: number[], val: number) => {
+  const pushMinHeap = (arr: number[], val: number): Array<{ child: number; parent: number; heap: number[] }> => {
+    const swaps: Array<{ child: number; parent: number; heap: number[] }> = [];
     arr.push(val);
+    swaps.push({ child: arr.length - 1, parent: -1, heap: [...arr] });
     let i = arr.length - 1;
     while (i > 0) {
       const parent = Math.floor((i - 1) / 2);
       if (arr[parent] > arr[i]) {
         [arr[parent], arr[i]] = [arr[i], arr[parent]];
+        swaps.push({ child: i, parent, heap: [...arr] });
         i = parent;
       } else break;
     }
+    return swaps;
   };
   
   const popMinHeap = (arr: number[]): number => {
@@ -197,8 +207,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
       const num = val[0] as number;
       
       // 步骤1: 显示要添加的数字
-      steps.push({
-        id: stepId++,
+      pushStep({
         description: `新数字 ${num} 到达数据流，先和中间边界比较，再决定放到哪一半。`,
         codeLines: { java: [5], python: [5], golang: [8], javascript: [5] },
         maxHeap: [...maxHeap],
@@ -213,16 +222,50 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         ],
       });
       
-      // 步骤2: 判断并添加
-      if (maxHeap.length === 0 || num <= maxHeap[0]) {
-        pushMaxHeap(maxHeap, num);
-        steps.push({
-          id: stepId++,
+      // 先说明新数字与左右边界的比较结果。
+      const goesLeft = maxHeap.length === 0 || num <= maxHeap[0];
+      pushStep({
+        title: '判断新数字属于哪一半',
+        description: maxHeap.length === 0
+          ? `左边还没有边界值，先把 ${num} 放进较小的一半。`
+          : `${num} ${goesLeft ? '≤' : '>'} 左边最大值 ${maxHeap[0]}，因此放入${goesLeft ? '较小' : '较大'}的一半。`,
+        codeLines: { java: [11], python: [41], golang: [69], javascript: [96] },
+        maxHeap: [...maxHeap], minHeap: [...minHeap], currentNum: num, narratedValue: num,
+        focusHeap: maxHeap.length ? 'max' : undefined, focusIndices: maxHeap.length ? [0] : undefined,
+        sortedValues: snapshot(), action: 'compare',
+        variables: { num, 'maxHeap.top': maxHeap[0] ?? '空' }, annotations: [],
+      });
+      if (goesLeft) {
+        const maxSwaps = pushMaxHeap(maxHeap, num);
+        const placedHeap = [...maxHeap];
+        maxSwaps.forEach(({ child, parent, heap }, swapIndex) => {
+          if (parent === -1) {
+            pushStep({
+              title: '放到大顶堆末尾',
+              description: `先把 ${num} 放进下一个空位置（堆内位置 ${child}），再从底向上检查父节点。`,
+              codeLines: { java: [6], python: [6], golang: [9], javascript: [6] },
+              maxHeap: heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: [child],
+              narratedValue: num, targetHeap: 'max', sortedValues: snapshot(), action: 'insert',
+              variables: { num, child, 'maxHeap.size': heap.length }, annotations: [],
+            });
+            return;
+          }
+          pushStep({
+            title: `恢复大顶堆顺序（第 ${swapIndex} 次交换）`,
+            description: `子节点 ${heap[child]} 大于父节点 ${heap[parent]}，交换位置 ${child} 和 ${parent}，让较大的值向堆顶移动。`,
+            codeLines: { java: [6], python: [6], golang: [9], javascript: [6] },
+            maxHeap: heap, minHeap: [...minHeap], focusHeap: 'max', focusIndices: [parent], compareIndices: [child, parent],
+            narratedValue: num, targetHeap: 'max', sortedValues: snapshot(), action: 'swap',
+            variables: { num, child, parent, 'maxHeap.top': heap[0] }, annotations: [],
+          });
+        });
+        pushStep({
+          title: '放入较小的一半',
           description: maxHeap.length === 1
             ? `左边还没有数字，先把 ${num} 放在左边，作为当前中间边界。`
             : `${num} 不大于左边最大值 ${maxHeap[0]}，所以 ${num} 属于较小的一半。`,
           codeLines: { java: [6, 7], python: [6, 7], golang: [9, 10], javascript: [6, 7] },
-          maxHeap: [...maxHeap],
+          maxHeap: placedHeap,
           minHeap: [...minHeap],
           currentNum: num,
           narratedValue: num,
@@ -257,7 +300,37 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           });
         }
       } else {
-        pushMinHeap(minHeap, num);
+        const insertionIndex = minHeap.length;
+        const minSwaps = pushMinHeap(minHeap, num);
+        pushStep({
+          title: '放入较大的一半',
+          description: `新数字 ${num} 大于左边最大值 ${maxHeap[0]}，先放到右边；右堆目前有 ${minHeap.length} 个数。`,
+          codeLines: { java: [12, 13], python: [11, 12], golang: [15, 16], javascript: [12, 13] },
+          maxHeap: [...maxHeap], minHeap: [...minHeap], currentNum: num, narratedValue: num, targetHeap: 'min',
+          focusHeap: 'min', focusIndices: [insertionIndex], sortedValues: [...maxHeap, ...minHeap].sort((a, b) => a - b), action: 'insert',
+          variables: { num, 'maxHeap.top': maxHeap[0], 'minHeap.size': minHeap.length }, annotations: [],
+        });
+        minSwaps.forEach(({ child, parent, heap }, swapIndex) => {
+          if (parent === -1) {
+            pushStep({
+              title: '放到小顶堆末尾',
+              description: `先把 ${num} 放进右堆下一个空位置（堆内位置 ${child}），再向上检查是否需要交换。`,
+              codeLines: { java: [12], python: [11], golang: [15], javascript: [12] },
+              maxHeap: [...maxHeap], minHeap: heap, focusHeap: 'min', focusIndices: [child],
+              narratedValue: num, targetHeap: 'min', sortedValues: [...maxHeap, ...heap].sort((a, b) => a - b), action: 'insert',
+              variables: { num, child, 'minHeap.size': heap.length }, annotations: [],
+            });
+            return;
+          }
+          pushStep({
+            title: `恢复小顶堆顺序（第 ${swapIndex} 次交换）`,
+            description: `子节点 ${heap[child]} 小于父节点 ${heap[parent]}，交换位置 ${child} 和 ${parent}，让较小值向堆顶移动。`,
+            codeLines: { java: [12], python: [11], golang: [15], javascript: [12] },
+            maxHeap: [...maxHeap], minHeap: heap, focusHeap: 'min', focusIndices: [parent], compareIndices: [child, parent],
+            narratedValue: num, targetHeap: 'min', sortedValues: snapshot(), action: 'swap',
+            variables: { num, child, parent, 'minHeap.top': heap[0] }, annotations: [],
+          });
+        });
         steps.push({
           id: stepId++,
           description: `${num} 大于左边最大值 ${maxHeap[0]}，所以 ${num} 属于较大的一半，放入右边。`,
@@ -299,10 +372,25 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
       }
     } else if (op === 'findMedian') {
       const totalSize = maxHeap.length + minHeap.length;
+      pushStep({
+        title: `查询前已有 ${totalSize} 个数字`,
+        description: `findMedian 不修改堆，只读取边界。先数清左右两堆各有多少个数字，再判断中间位置落在哪里。`,
+        codeLines: { java: [24, 25], python: [50, 51], golang: [82, 83], javascript: [109, 110] },
+        maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), action: 'compare',
+        variables: { 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length, totalSize }, annotations: [],
+      });
       let median: number;
       
       if (maxHeap.length > minHeap.length) {
         median = maxHeap[0];
+        pushStep({
+          title: '总数为奇数，读取左堆顶',
+          description: `左边有 ${maxHeap.length} 个、右边有 ${minHeap.length} 个；左边多一个，因此左边最大值 ${median} 就在正中间。`,
+          codeLines: { java: [28, 29], python: [51, 52], golang: [83, 84], javascript: [110, 111] },
+          maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), median,
+          focusHeap: 'max', focusIndices: [0], action: 'compare',
+          variables: { 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length, 'maxHeap.top': median }, annotations: [],
+        });
         steps.push({
           id: stepId++,
           description: `现在有 ${totalSize} 个数，左边比右边多 1 个；左边最大值 ${median} 正好位于正中间。`,
@@ -318,6 +406,14 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         });
       } else {
         median = (maxHeap[0] + minHeap[0]) / 2;
+        pushStep({
+          title: '总数为偶数，取两个边界的平均值',
+          description: `两边各有 ${maxHeap.length} 个数字，中间落在边界之间；取左边最大值 ${maxHeap[0]} 与右边最小值 ${minHeap[0]} 的平均值。`,
+          codeLines: { java: [31], python: [53], golang: [86], javascript: [113] },
+          maxHeap: [...maxHeap], minHeap: [...minHeap], sortedValues: snapshot(), median,
+          focusHeap: 'max', focusIndices: [0], compareIndices: [0], action: 'compare',
+          variables: { 'maxHeap.top': maxHeap[0], 'minHeap.top': minHeap[0], median }, annotations: [],
+        });
         steps.push({
           id: stepId++,
           description: `现在有 ${totalSize} 个数，中间落在两数之间；取左边最大值 ${maxHeap[0]} 和右边最小值 ${minHeap[0]} 的平均数 ${median}。`,

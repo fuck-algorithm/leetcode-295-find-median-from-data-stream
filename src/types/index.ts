@@ -16,7 +16,11 @@ export interface AlgorithmStep {
   sourceHeap?: 'max' | 'min';
   targetHeap?: 'max' | 'min';
   sortedValues?: number[];
-  action: 'init' | 'add' | 'balance' | 'findMedian' | 'complete';
+  focusHeap?: 'max' | 'min';
+  focusIndices?: number[];
+  compareIndices?: number[];
+  title?: string;
+  action: 'init' | 'add' | 'insert' | 'compare' | 'swap' | 'balance' | 'findMedian' | 'complete';
   variables: Record<string, string | number | null>;
   annotations: Annotation[];
 }
