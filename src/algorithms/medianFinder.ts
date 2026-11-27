@@ -180,6 +180,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
     codeLines: { java: [1, 2, 3], python: [1, 2, 3], golang: [1, 2, 3, 4], javascript: [1, 2, 3] },
     maxHeap: [],
     minHeap: [],
+    sortedValues: [],
     action: 'init',
     variables: { 'maxHeap.size': 0, 'minHeap.size': 0 },
     annotations: [
@@ -203,6 +204,8 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         maxHeap: [...maxHeap],
         minHeap: [...minHeap],
         currentNum: num,
+        narratedValue: num,
+        sortedValues: [...maxHeap, ...minHeap].sort((a, b) => a - b),
         action: 'add',
         variables: { num, 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length },
         annotations: [
@@ -222,6 +225,9 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           maxHeap: [...maxHeap],
           minHeap: [...minHeap],
           currentNum: num,
+          narratedValue: num,
+          targetHeap: 'max',
+          sortedValues: [...maxHeap, ...minHeap].sort((a, b) => a - b),
           action: 'add',
           variables: { num, 'maxHeap.top': maxHeap[0], 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length },
           annotations: [
@@ -235,10 +241,14 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           pushMinHeap(minHeap, moved);
           steps.push({
             id: stepId++,
-            description: `左边比右边多出 2 个，移动左边最大的 ${moved} 到右边；边界仍有序，两边数量恢复接近。`,
+            description: `左边比右边多出 2 个，把左边最大的 ${moved} 移到右边；分界仍有序，两边数量恢复接近。`,
             codeLines: { java: [8, 9, 10], python: [8, 9], golang: [11, 12, 13], javascript: [8, 9, 10] },
             maxHeap: [...maxHeap],
             minHeap: [...minHeap],
+            narratedValue: moved,
+            sourceHeap: 'max',
+            targetHeap: 'min',
+            sortedValues: [...maxHeap, ...minHeap].sort((a, b) => a - b),
             action: 'balance',
             variables: { moved, 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length },
             annotations: [
@@ -255,6 +265,9 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           maxHeap: [...maxHeap],
           minHeap: [...minHeap],
           currentNum: num,
+          narratedValue: num,
+          targetHeap: 'min',
+          sortedValues: [...maxHeap, ...minHeap].sort((a, b) => a - b),
           action: 'add',
           variables: { num, 'maxHeap.top': maxHeap[0], 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length },
           annotations: [
@@ -272,6 +285,10 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
             codeLines: { java: [14, 15, 16], python: [13, 14], golang: [17, 18, 19], javascript: [14, 15, 16] },
             maxHeap: [...maxHeap],
             minHeap: [...minHeap],
+            narratedValue: moved,
+            sourceHeap: 'min',
+            targetHeap: 'max',
+            sortedValues: [...maxHeap, ...minHeap].sort((a, b) => a - b),
             action: 'balance',
             variables: { moved, 'maxHeap.size': maxHeap.length, 'minHeap.size': minHeap.length },
             annotations: [

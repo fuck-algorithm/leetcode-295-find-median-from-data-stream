@@ -12,6 +12,10 @@ export interface AlgorithmStep {
   minHeap: number[];
   currentNum?: number;
   median?: number | null;
+  narratedValue?: number;
+  sourceHeap?: 'max' | 'min';
+  targetHeap?: 'max' | 'min';
+  sortedValues?: number[];
   action: 'init' | 'add' | 'balance' | 'findMedian' | 'complete';
   variables: Record<string, string | number | null>;
   annotations: Annotation[];
