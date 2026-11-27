@@ -176,7 +176,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
   // 初始化步骤
   steps.push({
     id: stepId++,
-    description: '初始化 MedianFinder，创建两个堆：maxHeap（大顶堆，存储较小的一半）和 minHeap（小顶堆，存储较大的一半）',
+    description: '先把数字分成左右两半：左边放较小的数，右边放较大的数。两个堆分别帮我们快速找到中间边界。',
     codeLines: { java: [1, 2, 3], python: [1, 2, 3], golang: [1, 2, 3, 4], javascript: [1, 2, 3] },
     maxHeap: [],
     minHeap: [],
@@ -198,7 +198,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
       // 步骤1: 显示要添加的数字
       steps.push({
         id: stepId++,
-        description: `调用 addNum(${num})，准备将 ${num} 添加到数据结构中`,
+        description: `新数字 ${num} 到达数据流，先和中间边界比较，再决定放到哪一半。`,
         codeLines: { java: [5], python: [5], golang: [8], javascript: [5] },
         maxHeap: [...maxHeap],
         minHeap: [...minHeap],
@@ -215,9 +215,9 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         pushMaxHeap(maxHeap, num);
         steps.push({
           id: stepId++,
-          description: maxHeap.length === 1 
-            ? `maxHeap 为空，将 ${num} 添加到 maxHeap` 
-            : `${num} <= maxHeap 堆顶 ${maxHeap[0]}，将 ${num} 添加到 maxHeap`,
+          description: maxHeap.length === 1
+            ? `左边还没有数字，先把 ${num} 放在左边，作为当前中间边界。`
+            : `${num} 不大于左边最大值 ${maxHeap[0]}，所以 ${num} 属于较小的一半。`,
           codeLines: { java: [6, 7], python: [6, 7], golang: [9, 10], javascript: [6, 7] },
           maxHeap: [...maxHeap],
           minHeap: [...minHeap],
@@ -235,7 +235,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           pushMinHeap(minHeap, moved);
           steps.push({
             id: stepId++,
-            description: `maxHeap 大小 (${maxHeap.length + 1}) > minHeap 大小 + 1 (${minHeap.length})，需要平衡：将 maxHeap 堆顶 ${moved} 移动到 minHeap`,
+            description: `左边比右边多出 2 个，移动左边最大的 ${moved} 到右边；边界仍有序，两边数量恢复接近。`,
             codeLines: { java: [8, 9, 10], python: [8, 9], golang: [11, 12, 13], javascript: [8, 9, 10] },
             maxHeap: [...maxHeap],
             minHeap: [...minHeap],
@@ -250,7 +250,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         pushMinHeap(minHeap, num);
         steps.push({
           id: stepId++,
-          description: `${num} > maxHeap 堆顶 ${maxHeap[0]}，将 ${num} 添加到 minHeap`,
+          description: `${num} 大于左边最大值 ${maxHeap[0]}，所以 ${num} 属于较大的一半，放入右边。`,
           codeLines: { java: [12, 13], python: [11, 12], golang: [15, 16], javascript: [12, 13] },
           maxHeap: [...maxHeap],
           minHeap: [...minHeap],
@@ -268,7 +268,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
           pushMaxHeap(maxHeap, moved);
           steps.push({
             id: stepId++,
-            description: `minHeap 大小 (${minHeap.length + 1}) > maxHeap 大小 (${maxHeap.length - 1})，需要平衡：将 minHeap 堆顶 ${moved} 移动到 maxHeap`,
+            description: `右边比左边多出 1 个，把右边最小的 ${moved} 移到左边；较小与较大的分界没有被破坏。`,
             codeLines: { java: [14, 15, 16], python: [13, 14], golang: [17, 18, 19], javascript: [14, 15, 16] },
             maxHeap: [...maxHeap],
             minHeap: [...minHeap],
@@ -288,7 +288,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         median = maxHeap[0];
         steps.push({
           id: stepId++,
-          description: `调用 findMedian()：总元素数 ${totalSize} 为奇数，中位数 = maxHeap 堆顶 = ${median}`,
+          description: `现在有 ${totalSize} 个数，左边比右边多 1 个；左边最大值 ${median} 正好位于正中间。`,
           codeLines: { java: [20, 21], python: [17, 18], golang: [23, 24], javascript: [20, 21] },
           maxHeap: [...maxHeap],
           minHeap: [...minHeap],
@@ -303,7 +303,7 @@ export const generateSteps = (operations: string[], values: (number | null)[][])
         median = (maxHeap[0] + minHeap[0]) / 2;
         steps.push({
           id: stepId++,
-          description: `调用 findMedian()：总元素数 ${totalSize} 为偶数，中位数 = (maxHeap 堆顶 ${maxHeap[0]} + minHeap 堆顶 ${minHeap[0]}) / 2 = ${median}`,
+          description: `现在有 ${totalSize} 个数，中间落在两数之间；取左边最大值 ${maxHeap[0]} 和右边最小值 ${minHeap[0]} 的平均数 ${median}。`,
           codeLines: { java: [23], python: [19], golang: [26], javascript: [23] },
           maxHeap: [...maxHeap],
           minHeap: [...minHeap],
